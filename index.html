@@ -3,30 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>VDS Music PRO</title>
+    <title>VDS Debug Console</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 180px; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 200px; }
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
-        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px; }
-        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color:#000; font-weight: bold; }
-        .track-card { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
-        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 20px; box-sizing: border-box; display: none; }
-        #log { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 20px; max-height: 80px; overflow-y: auto; }
-        .controls { width: 100%; filter: invert(1) brightness(1.5); }
+        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); font-weight: bold; }
+        .track-card { background: var(--card); padding: 12px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #222; display: flex; justify-content: space-between; }
+        
+        #debug-panel { background: #000; color: #00ff00; font-family: monospace; font-size: 10px; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px; }
+        .err { color: #ff4444; }
+        .ok { color: #00ff00; }
+        
+        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 20px; box-sizing: border-box; display: none; border-top: 1px solid #333; }
+        audio { width: 100%; filter: invert(1); }
     </style>
 </head>
 <body>
     <div class="search-row">
-        <input id="q" type="text" placeholder="Поиск музыки...">
+        <input id="q" type="text" placeholder="Поиск для теста...">
         <button class="btn" onclick="search()">Найти</button>
     </div>
     <div id="results"></div>
-    <div id="log">Статус: Готов</div>
+
+    <div id="debug-panel">
+        <div style="color: var(--accent); font-weight: bold; margin-bottom: 5px;">🔧 ДИАГНОСТИКА SAFARI:</div>
+        <div id="diag-support">Проверка поддержки MP3...</div>
+        <div id="diag-last-err" class="err">Ошибок пока нет.</div>
+        <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
+        <div id="diag-log">Ожидание действий...</div>
+    </div>
+
     <div id="player-bar">
-        <div id="now-playing" style="font-size: 13px; margin-bottom: 10px; color: var(--accent); font-weight: bold;"></div>
-        <div id="audio-container"></div>
+        <div id="track-name" style="font-size: 12px; margin-bottom: 8px;"></div>
+        <audio id="audio" controls playsinline></audio>
     </div>
 
     <script>
@@ -34,48 +46,59 @@
         tg.expand();
         const API = "https://surround-subpar-distort.ngrok-free.dev";
 
-        function addLog(msg) {
-            const l = document.getElementById('log');
-            l.innerText += "\n> " + msg;
-            l.scrollTop = l.scrollHeight;
+        // Проверка поддержки при загрузке
+        const audioTest = document.createElement('audio');
+        const canMP3 = audioTest.canPlayType('audio/mpeg');
+        document.getElementById('diag-support').innerHTML = `Поддержка audio/mpeg: <b class="${canMP3 ? 'ok':'err'}">${canMP3 || 'НЕТ'}</b>`;
+
+        function addDiag(msg, isErr = false) {
+            const log = document.getElementById('diag-log');
+            const time = new Date().toLocaleTimeString().split(' ')[0];
+            log.innerHTML = `[${time}] ${isErr ? '<span class="err">!</span> ' : ''}${msg}<br>` + log.innerHTML;
         }
 
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            document.getElementById('results').innerHTML = "⏳ Поиск...";
+            addDiag("Запрос поиска: " + q);
             try {
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
-                    headers: { "ngrok-skip-browser-warning": "69420" }
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { headers: {"ngrok-skip-browser-warning":"1"} });
+                const d = await r.json();
+                addDiag("Найдено: " + d.tracks.length);
+                let h = '';
+                d.tracks.forEach(t => {
+                    h += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
+                        <span>${t.title}</span><span style="color:var(--accent)">▶</span></div>`;
                 });
-                const data = await r.json();
-                let html = '';
-                data.tracks.forEach(t => {
-                    html += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
-                        <div><b>${t.title}</b><br><small style="color:#888">${t.artist}</small></div>
-                        <div style="color:var(--accent)">▶</div>
-                    </div>`;
-                });
-                document.getElementById('results').innerHTML = html;
-            } catch (e) { addLog("Ошибка: " + e.message); }
+                document.getElementById('results').innerHTML = h;
+            } catch (e) { addDiag("Ошибка сети: " + e.message, true); }
         }
 
         function play(id, url, title) {
+            const a = document.getElementById('audio');
             document.getElementById('player-bar').style.display = 'block';
-            document.getElementById('now-playing').innerText = "🎶 " + title;
-            addLog("Инициализация аудио...");
+            document.getElementById('track-name').innerText = title;
+            
+            const streamUrl = `${API}/stream/${id}?url=${url}`;
+            addDiag("🔗 Ссылка: " + streamUrl);
+            
+            a.pause();
+            a.src = streamUrl;
+            a.load();
 
-            // ПОЛНАЯ ПЕРЕЗАГРУЗКА ЭЛЕМЕНТА AUDIO ДЛЯ IOS
-            const container = document.getElementById('audio-container');
-            container.innerHTML = `<audio id="audio" class="controls" controls autoplay playsinline preload="auto"></audio>`;
+            a.oncanplay = () => addDiag("✅ Браузер готов играть файл");
+            a.onloadstart = () => addDiag("📥 Начало загрузки данных...");
             
-            const audio = document.getElementById('audio');
-            audio.src = `${API}/stream/${id}?url=${url}`;
-            
-            audio.play().then(() => {
-                addLog("✅ Воспроизведение началось");
-            }).catch(e => {
-                addLog("❌ Ошибка: " + e.name);
+            a.onerror = () => {
+                const errs = ["ABORTED", "NETWORK", "DECODE", "SRC_NOT_SUPPORTED"];
+                const msg = `ОШИБКА: ${errs[a.error.code - 1] || 'UNKNOWN'}`;
+                document.getElementById('diag-last-err').innerText = msg;
+                addDiag(msg, true);
+            };
+
+            a.play().then(() => addDiag("🎵 Играет")).catch(e => {
+                addDiag("🚫 Блок: " + e.name, true);
+                document.getElementById('diag-last-err').innerText = "Safari Block: " + e.name;
             });
         }
     </script>
