@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Music Aggregator</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --yandex-yellow: #FFCC00;
+            --bg-color: #111111;
+            --card-bg: #1A1A1A;
+            --text-main: #FFFFFF;
+            --text-gray: #888888;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow: hidden;
+        }
+
+        .header {
+            font-size: 22px;
+            font-weight: 800;
+            color: var(--yandex-yellow);
+            margin-bottom: 30px;
+            letter-spacing: 1px;
+        }
+
+        .search-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+
+        input {
+            background-color: var(--card-bg);
+            border: 2px solid transparent;
+            border-radius: 15px;
+            padding: 15px;
+            color: white;
+            font-size: 16px;
+            outline: none;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            border-color: var(--yandex-yellow);
+        }
+
+        .main-btn {
+            background-color: var(--yandex-yellow);
+            color: black;
+            border: none;
+            border-radius: 15px;
+            padding: 18px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .main-btn:active {
+            transform: scale(0.98);
+        }
+
+        .hint {
+            margin-top: 20px;
+            font-size: 12px;
+            color: var(--text-gray);
+            text-align: center;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">MUSIC AGGREGATOR</div>
+    
+    <div class="search-container">
+        <input type="text" id="music_query" placeholder="Трек, артист или ссылка...">
+        <button class="main-btn" onclick="sendData()">НАЙТИ И ПРИСЛАТЬ</button>
+    </div>
+
+    <div class="hint">
+        Введите название песни.<br>
+        После нажатия бот пришлет аудио в чат.
+    </div>
+
+    <script>
+        // Инициализация Telegram WebApp
+        let tg = window.Telegram.WebApp;
+        tg.expand(); // Развернуть на весь экран
+        tg.ready();
+
+        function sendData() {
+            let query = document.getElementById('music_query').value;
+            if (query.trim() === "") {
+                tg.showAlert("Введите название песни!");
+                return;
+            }
+            // Отправляем данные боту и закрываем окно
+            tg.sendData(query);
+            tg.close();
+        }
+    </script>
+</body>
+</html>
