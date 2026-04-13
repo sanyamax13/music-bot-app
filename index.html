@@ -3,112 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Music Aggregator</title>
+    <title>VDS Music App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        :root {
-            --yandex-yellow: #FFCC00;
-            --bg-color: #111111;
-            --card-bg: #1A1A1A;
-            --text-main: #FFFFFF;
-            --text-gray: #888888;
-        }
+        :root { --yandex-yellow: #FFCC00; --bg: #000; --card: #1A1A1A; }
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; padding: 0; padding-bottom: 100px; }
+        
+        .nav-tabs { display: flex; justify-content: space-around; background: #111; padding: 15px 0; position: sticky; top: 0; z-index: 10; }
+        .tab { color: #888; font-weight: bold; font-size: 14px; cursor: pointer; }
+        .tab.active { color: var(--yandex-yellow); }
 
-        body {
-            background-color: var(--bg-color);
-            color: var(--text-main);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            overflow: hidden;
-        }
+        .section { padding: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
+        .genre-card { background: var(--card); padding: 20px; border-radius: 15px; text-align: center; font-weight: bold; }
+        
+        .track-item { display: flex; align-items: center; background: var(--card); padding: 10px; border-radius: 12px; margin-bottom: 10px; }
+        .track-info { margin-left: 15px; flex-grow: 1; }
+        .play-btn { background: var(--yandex-yellow); border: none; border-radius: 50%; width: 35px; height: 35px; font-weight: bold; }
 
-        .header {
-            font-size: 22px;
-            font-weight: 800;
-            color: var(--yandex-yellow);
-            margin-bottom: 30px;
-            letter-spacing: 1px;
-        }
-
-        .search-container {
-            width: 100%;
-            display: flex;
-            flex-direction: column;
-            gap: 15px;
-        }
-
-        input {
-            background-color: var(--card-bg);
-            border: 2px solid transparent;
-            border-radius: 15px;
-            padding: 15px;
-            color: white;
-            font-size: 16px;
-            outline: none;
-            transition: border-color 0.3s;
-        }
-
-        input:focus {
-            border-color: var(--yandex-yellow);
-        }
-
-        .main-btn {
-            background-color: var(--yandex-yellow);
-            color: black;
-            border: none;
-            border-radius: 15px;
-            padding: 18px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: transform 0.1s;
-        }
-
-        .main-btn:active {
-            transform: scale(0.98);
-        }
-
-        .hint {
-            margin-top: 20px;
-            font-size: 12px;
-            color: var(--text-gray);
-            text-align: center;
-            line-height: 1.5;
-        }
+        /* Нижний плеер */
+        .bottom-player { position: fixed; bottom: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 15px; display: none; box-sizing: border-box; }
+        audio { width: 100%; height: 30px; margin-top: 10px; filter: invert(1); }
     </style>
 </head>
 <body>
-    <div class="header">MUSIC AGGREGATOR</div>
-    
-    <div class="search-container">
-        <input type="text" id="music_query" placeholder="Трек, артист или ссылка...">
-        <button class="main-btn" onclick="sendData()">НАЙТИ И ПРИСЛАТЬ</button>
+    <div class="nav-tabs">
+        <div class="tab active" onclick="showSec('home')">Главная</div>
+        <div class="tab" onclick="showSec('charts')">Чарты</div>
+        <div class="tab" onclick="showSec('genres')">Жанры</div>
     </div>
 
-    <div class="hint">
-        Введите название песни.<br>
-        После нажатия бот пришлет аудио в чат.
+    <div id="home" class="section">
+        <h2 style="color: var(--yandex-yellow);">Для тебя</h2>
+        <input type="text" id="search" placeholder="Поиск..." style="width:90%; padding:12px; border-radius:10px; border:none; background:#222; color:white;">
+        <button onclick="searchMusic()" style="margin-top:10px; width:95%; padding:12px; background:var(--yandex-yellow); border:none; border-radius:10px; font-weight:bold;">Найти</button>
+        
+        <div id="results" style="margin-top:20px;"></div>
+    </div>
+
+    <div id="charts" class="section" style="display:none;">
+        <h2 style="color: var(--yandex-yellow);">Топ недели</h2>
+        <div class="track-item">
+            <div class="play-btn" onclick="playTrack('http://72.56.96.49:8000/play/top1', 'Track 1')">▶</div>
+            <div class="track-info"><b>Кино - Группа крови</b><br><small>Legend</small></div>
+        </div>
+    </div>
+
+    <div id="genres" class="section" style="display:none;">
+        <h2>Жанры</h2>
+        <div class="grid">
+            <div class="genre-card" style="border-left: 5px solid red;">Rock</div>
+            <div class="genre-card" style="border-left: 5px solid blue;">Lo-Fi</div>
+            <div class="genre-card" style="border-left: 5px solid green;">Rap</div>
+            <div class="genre-card" style="border-left: 5px solid purple;">Phonk</div>
+        </div>
+    </div>
+
+    <div class="bottom-player" id="player-ui">
+        <div id="current-title">Название трека</div>
+        <audio id="main-audio" controls autoplay></audio>
     </div>
 
     <script>
-        // Инициализация Telegram WebApp
         let tg = window.Telegram.WebApp;
-        tg.expand(); // Развернуть на весь экран
-        tg.ready();
+        tg.expand();
 
-        function sendData() {
-            let query = document.getElementById('music_query').value;
-            if (query.trim() === "") {
-                tg.showAlert("Введите название песни!");
-                return;
-            }
-            // Отправляем данные боту и закрываем окно
-            tg.sendData(query);
-            tg.close();
+        function showSec(id) {
+            document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
+            document.getElementById(id).style.display = 'block';
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            event.target.classList.add('active');
+        }
+
+        async function searchMusic() {
+            let q = document.getElementById('search').value;
+            if(!q) return;
+            // В реальном приложении мы шлем запрос на API сервера
+            // Для теста используем tg.sendData чтобы бот скачал и прислал ссылку (упрощенно)
+            tg.sendData(q);
+        }
+
+        function playTrack(url, title) {
+            document.getElementById('player-ui').style.display = 'block';
+            document.getElementById('current-title').innerText = title;
+            let audio = document.getElementById('main-audio');
+            audio.src = url;
+            audio.play();
         }
     </script>
 </body>
