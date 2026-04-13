@@ -3,31 +3,30 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Vibe Player PRO</title>
+    <title>VDS Music PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; padding-bottom: 180px; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 180px; }
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
         input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px; }
-        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color:#000; font-weight: bold; cursor: pointer; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color:#000; font-weight: bold; }
         .track-card { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
-        .track-card:active { background: #222; transform: scale(0.98); }
-        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 20px; box-sizing: border-box; display: none; z-index: 100; }
-        audio { width: 100%; filter: invert(100%) brightness(1.5); }
-        #log-window { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 12px; border-radius: 10px; margin-top: 20px; border: 1px solid #333; max-height: 100px; overflow-y: auto; }
+        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 20px; box-sizing: border-box; display: none; }
+        #log { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 20px; max-height: 80px; overflow-y: auto; }
+        .controls { width: 100%; filter: invert(1) brightness(1.5); }
     </style>
 </head>
 <body>
     <div class="search-row">
-        <input id="q" type="text" placeholder="Артист или песня...">
-        <button class="btn" onclick="search()">Поиск</button>
+        <input id="q" type="text" placeholder="Поиск музыки...">
+        <button class="btn" onclick="search()">Найти</button>
     </div>
     <div id="results"></div>
-    <div id="log-window">Система: Подключено.</div>
+    <div id="log">Статус: Готов</div>
     <div id="player-bar">
-        <div id="now-playing" style="font-size: 13px; margin-bottom: 10px; color: var(--accent); font-weight: bold; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;"></div>
-        <audio id="audio" controls playsinline preload="auto"></audio>
+        <div id="now-playing" style="font-size: 13px; margin-bottom: 10px; color: var(--accent); font-weight: bold;"></div>
+        <div id="audio-container"></div>
     </div>
 
     <script>
@@ -36,7 +35,7 @@
         const API = "https://surround-subpar-distort.ngrok-free.dev";
 
         function addLog(msg) {
-            const l = document.getElementById('log-window');
+            const l = document.getElementById('log');
             l.innerText += "\n> " + msg;
             l.scrollTop = l.scrollHeight;
         }
@@ -44,14 +43,12 @@
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            addLog("Запрос поиска: " + q);
-            document.getElementById('results').innerHTML = "<p style='text-align:center'>⏳ Поиск в YouTube...</p>";
+            document.getElementById('results').innerHTML = "⏳ Поиск...";
             try {
                 const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
                     headers: { "ngrok-skip-browser-warning": "69420" }
                 });
                 const data = await r.json();
-                addLog("Найдено треков: " + (data.tracks ? data.tracks.length : 0));
                 let html = '';
                 data.tracks.forEach(t => {
                     html += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
@@ -60,34 +57,26 @@
                     </div>`;
                 });
                 document.getElementById('results').innerHTML = html;
-            } catch (e) { addLog("Ошибка API: " + e.message); }
+            } catch (e) { addLog("Ошибка: " + e.message); }
         }
 
         function play(id, url, title) {
-            const audio = document.getElementById('audio');
             document.getElementById('player-bar').style.display = 'block';
             document.getElementById('now-playing').innerText = "🎶 " + title;
-            addLog("Подготовка стрима для iOS...");
-            
-            // 1. Очищаем плеер
-            audio.pause();
-            audio.src = "";
-            audio.load();
+            addLog("Инициализация аудио...");
 
-            // 2. Небольшая задержка, чтобы Safari успел сбросить буфер
-            setTimeout(() => {
-                const streamUrl = `${API}/stream/${id}?url=${url}`;
-                audio.src = streamUrl;
-                audio.load();
-                
-                audio.play()
-                    .then(() => addLog("✅ Воспроизведение..."))
-                    .catch(err => {
-                        addLog("❌ Блок Safari: " + err.name);
-                        // Показываем ошибку подробнее
-                        if(err.name === 'NotAllowedError') addLog("Нажмите Play вручную!");
-                    });
-            }, 150);
+            // ПОЛНАЯ ПЕРЕЗАГРУЗКА ЭЛЕМЕНТА AUDIO ДЛЯ IOS
+            const container = document.getElementById('audio-container');
+            container.innerHTML = `<audio id="audio" class="controls" controls autoplay playsinline preload="auto"></audio>`;
+            
+            const audio = document.getElementById('audio');
+            audio.src = `${API}/stream/${id}?url=${url}`;
+            
+            audio.play().then(() => {
+                addLog("✅ Воспроизведение началось");
+            }).catch(e => {
+                addLog("❌ Ошибка: " + e.name);
+            });
         }
     </script>
 </body>
