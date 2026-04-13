@@ -17,45 +17,53 @@
         @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         h2 { margin-top: 0; font-weight: 800; }
-        .search-bar { width: 100%; padding: 15px 20px; border-radius: 20px; border: none; background: var(--surface); color: white; font-size: 16px; outline: none; margin-bottom: 20px;}
         .btn-red { width: 100%; padding: 15px; border-radius: 20px; border: none; background: var(--accent); color: white; font-size: 16px; font-weight: bold; margin-bottom: 20px; cursor: pointer; }
         
         .track-list { display: flex; flex-direction: column; gap: 12px; }
-        .track-item { display: flex; align-items: center; background: var(--surface); padding: 10px; border-radius: 15px; cursor: pointer; position: relative;}
-        .track-thumb-container { width: 50px; height: 50px; border-radius: 10px; overflow: hidden; margin-right: 15px; position: relative; background: #111;}
-        .track-thumb-bg { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: blur(8px) brightness(0.5); transform: scale(1.2); z-index: 1; }
-        .track-thumb { position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
+        .track-item { display: flex; align-items: center; background: var(--surface); padding: 10px; border-radius: 15px; cursor: pointer;}
+        .track-thumb-container { width: 55px; height: 55px; border-radius: 12px; overflow: hidden; margin-right: 15px; position: relative; background: #111; flex-shrink: 0;}
+        .track-thumb { position: absolute; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: 2; }
         
         .track-info { flex: 1; overflow: hidden; white-space: nowrap; }
         .track-title { font-weight: 600; font-size: 15px; text-overflow: ellipsis; overflow: hidden; }
         .track-artist { font-size: 12px; color: var(--text-muted); text-overflow: ellipsis; overflow: hidden; }
-        
-        .fav-btn { font-size: 20px; padding: 10px; color: var(--text-muted); z-index: 10; transition: 0.2s;}
+        .fav-btn { font-size: 20px; padding: 10px; color: var(--text-muted); transition: 0.2s;}
         .fav-btn.active { color: var(--accent); }
 
         .genre-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
-        .genre-card { background: var(--surface); padding: 25px 15px; border-radius: 20px; text-align: center; font-weight: bold; }
+        .genre-card { background: var(--surface); padding: 15px; border-radius: 20px; text-align: center; font-weight: bold; font-size: 14px; box-shadow: 0 4px 10px rgba(0,0,0,0.2);}
 
         #log-console { background: #0b0b0b; color: #00ff00; font-family: monospace; font-size: 11px; padding: 15px; border-radius: 15px; height: 70vh; overflow-y: auto; }
 
-        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: rgba(30, 30, 36, 0.95); display: flex; justify-content: space-around; padding: 15px 10px 25px 10px; z-index: 100; }
+        /* Навигация */
+        .bottom-nav { position: fixed; bottom: 0; width: 100%; background: rgba(30, 30, 36, 0.95); display: flex; justify-content: space-around; padding: 15px 10px 25px 10px; z-index: 100; border-top: 1px solid rgba(255,255,255,0.05);}
         .nav-item { color: var(--text-muted); font-size: 11px; text-align: center; flex: 1; cursor: pointer; }
         .nav-item.active { color: var(--accent); font-weight: bold; }
         .nav-icon { font-size: 22px; display: block; margin-bottom: 4px; }
 
-        #mini-player { position: fixed; bottom: 85px; left: 10px; right: 10px; background: var(--surface-light); border-radius: 15px; padding: 10px; display: none; align-items: center; z-index: 99; cursor: pointer; border: 1px solid rgba(255,51,102,0.2); }
+        /* Плавающая кнопка поиска (FAB) */
+        .fab { position: fixed; bottom: 100px; right: 20px; background: var(--accent); width: 60px; height: 60px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 26px; box-shadow: 0 5px 20px var(--accent-glow); z-index: 150; cursor: pointer; transition: 0.2s; }
+        .fab:active { transform: scale(0.9); }
+
+        /* Оверлей поиска */
+        #search-overlay { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: rgba(26,26,32,0.98); backdrop-filter: blur(10px); z-index: 300; transition: top 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); padding: 30px 20px; display: flex; flex-direction: column; }
+        #search-overlay.open { top: 0; }
+        .search-header { display: flex; gap: 10px; margin-bottom: 20px; align-items: center;}
+        .search-bar { flex: 1; padding: 15px 20px; border-radius: 20px; border: none; background: var(--surface-light); color: white; font-size: 16px; outline: none; }
+        .close-search { font-size: 28px; color: var(--text-muted); padding: 10px; cursor: pointer; }
+
+        /* Мини-плеер */
+        #mini-player { position: fixed; bottom: 85px; left: 10px; right: 10px; background: var(--surface-light); border-radius: 15px; padding: 10px; display: none; align-items: center; z-index: 99; cursor: pointer; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
         .mp-play-btn { font-size: 24px; color: var(--accent); padding: 0 10px; }
 
-        #full-player { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; display: flex; flex-direction: column; padding: 30px; 
-            transition: top 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s ease; 
-        }
+        /* Полноэкранный плеер */
+        #full-player { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; display: flex; flex-direction: column; padding: 30px; transition: top 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s ease; }
         #full-player.open { top: 0; }
         .close-player { position: absolute; top: 20px; left: 20px; font-size: 24px; color: var(--text-muted); padding: 10px; z-index: 201; cursor: pointer;}
         .close-player-line { width: 40px; height: 5px; background: var(--surface-light); border-radius: 5px; margin: 0 auto 10px auto; }
         
         .art-container { width: 100%; aspect-ratio: 1/1; margin: 30px 0 30px 0; border-radius: 20px; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);}
-        #fp-cover-bg { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: blur(20px) brightness(0.6); transform: scale(1.2); z-index: 1; }
-        #fp-cover { position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
+        #fp-cover { position: absolute; width: 100%; height: 100%; object-fit: cover; object-position: center; z-index: 2; }
         #loading-overlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); color:var(--accent); justify-content:center; align-items:center; font-weight:bold; z-index: 10; text-align:center; padding: 20px;}
         
         #fp-title { font-size: 24px; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px;}
@@ -69,7 +77,6 @@
         .controls { display: flex; justify-content: center; align-items: center; gap: 30px; margin-bottom: 20px;}
         .ctrl-btn { background: var(--surface); border: none; width: 60px; height: 60px; border-radius: 50%; color: var(--text); font-size: 24px; display: flex; justify-content: center; align-items: center; }
         .play-btn { background: var(--accent); width: 80px; height: 80px; font-size: 30px; box-shadow: 0 5px 20px var(--accent-glow); }
-        
         .extra-controls { display: flex; justify-content: space-between; padding: 0 20px; }
         .extra-btn { background: none; border: none; color: var(--text-muted); font-size: 24px; }
         .extra-btn.active { color: var(--accent); }
@@ -77,28 +84,27 @@
 </head>
 <body>
     <div id="content-area">
-        <div id="tab-search" class="tab-view active">
-            <h2>Поиск</h2>
-            <input id="q" class="search-bar" type="text" placeholder="Артист или песня..." onkeydown="if(event.key==='Enter') search()">
-            <div id="search-results" class="track-list"></div>
-        </div>
-
-        <div id="tab-random" class="tab-view">
-            <h2>Случайные</h2>
+        <div id="tab-random" class="tab-view active">
+            <h2>Случайные хиты</h2>
             <button class="btn-red" onclick="loadRandom(true)">🔄 Обновить</button>
             <div id="random-results" class="track-list"></div>
         </div>
 
         <div id="tab-genres" class="tab-view">
-            <h2 id="genre-title">Жанры</h2>
+            <h2 id="genre-title">Жанры музыки</h2>
             <div id="genre-grid" class="genre-grid"></div>
             <div id="genre-results" class="track-list" style="display:none; margin-top: 20px;"></div>
-            <button id="genre-back" class="btn-red" style="display:none; margin-top: 20px;" onclick="showGenreGrid()">🔙 Назад</button>
+            <button id="genre-back" class="btn-red" style="display:none; margin-top: 20px;" onclick="showGenreGrid()">🔙 Назад к жанрам</button>
         </div>
 
         <div id="tab-fav" class="tab-view">
             <h2>Избранное</h2>
             <div id="fav-results" class="track-list"></div>
+        </div>
+
+        <div id="tab-history" class="tab-view">
+            <h2>Недавно играли</h2>
+            <div id="history-results" class="track-list"></div>
         </div>
 
         <div id="tab-logs" class="tab-view">
@@ -107,11 +113,20 @@
         </div>
     </div>
 
-    <div id="mini-player" onclick="openFullPlayer()">
-        <div class="track-thumb-container">
-            <img id="mp-thumb-bg" class="track-thumb-bg" src="">
-            <img id="mp-thumb" class="track-thumb" src="">
+    <div class="fab" onclick="document.getElementById('search-overlay').classList.add('open'); document.getElementById('q').focus();">🔍</div>
+    
+    <div id="search-overlay">
+        <div class="search-header">
+            <input id="q" class="search-bar" type="text" placeholder="Артист, песня, альбом..." onkeydown="if(event.key==='Enter') search()">
+            <div class="close-search" onclick="document.getElementById('search-overlay').classList.remove('open')">✖</div>
         </div>
+        <div id="search-results" class="track-list" style="overflow-y: auto; flex: 1; padding-bottom: 50px;">
+            <p style="text-align:center; color:#888;">Введите запрос для поиска</p>
+        </div>
+    </div>
+
+    <div id="mini-player" onclick="openFullPlayer()">
+        <div class="track-thumb-container"><img id="mp-thumb" class="track-thumb" src=""></div>
         <div class="track-info">
             <div id="mp-title" class="track-title"></div>
             <div id="mp-artist" class="track-artist"></div>
@@ -124,7 +139,6 @@
         <div class="close-player" onclick="closeFullPlayer()">🡇</div>
         <div class="art-container">
             <div id="loading-overlay">Загрузка...</div>
-            <img id="fp-cover-bg" src="">
             <img id="fp-cover" src="">
         </div>
         <div id="fp-title"></div>
@@ -144,7 +158,7 @@
         
         <div class="extra-controls">
             <button id="fp-fav-btn" class="extra-btn" onclick="toggleFavCurrent()">🤍</button>
-            <button class="extra-btn">🔀</button>
+            <button class="extra-btn" onclick="toggleLoop()" id="loop-btn">🔁</button>
         </div>
     </div>
 
@@ -152,10 +166,10 @@
     <audio id="audioB" playsinline></audio>
 
     <div class="bottom-nav">
-        <div class="nav-item active" onclick="switchTab('search', this)"><span class="nav-icon">🔍</span>Поиск</div>
-        <div class="nav-item" onclick="switchTab('random', this)"><span class="nav-icon">🎲</span>Случайные</div>
+        <div class="nav-item active" onclick="switchTab('random', this)"><span class="nav-icon">🎲</span>Случайные</div>
         <div class="nav-item" onclick="switchTab('genres', this)"><span class="nav-icon">🎸</span>Жанры</div>
         <div class="nav-item" onclick="switchTab('fav', this)"><span class="nav-icon">❤️</span>Избранное</div>
+        <div class="nav-item" onclick="switchTab('history', this)"><span class="nav-icon">🕒</span>История</div>
         <div class="nav-item" onclick="switchTab('logs', this)"><span class="nav-icon">⚙️</span>Логи</div>
     </div>
 
@@ -170,92 +184,69 @@
         let nextAudio = document.getElementById('audioB');
         let currentQueue = [], currentIndex = -1, currentContext = '';
         let favorites = JSON.parse(localStorage.getItem('vds_favs') || '[]');
+        let playHistory = JSON.parse(localStorage.getItem('vds_history') || '[]');
         let isPreloading = false;
+        let isLooping = false;
 
         function log(msg) {
             const lc = document.getElementById('log-console');
             lc.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>` + lc.innerHTML;
         }
 
-        // --- УПРАВЛЕНИЕ ПОЛНОЭКРАННЫМ ПЛЕЕРОМ И СВАЙП ---
+        // --- СВАЙПЫ ---
         const fp = document.getElementById('full-player');
-        let startY = 0;
-        let currentY = 0;
+        let startX = 0, startY = 0, currentX = 0, currentY = 0;
 
-        function openFullPlayer() { 
-            fp.classList.add('open'); 
-            fp.style.transform = '';
-        }
-        function closeFullPlayer() { 
-            fp.classList.remove('open'); 
-        }
+        function openFullPlayer() { fp.classList.add('open'); fp.style.transform = ''; }
+        function closeFullPlayer() { fp.classList.remove('open'); }
 
-        fp.addEventListener('touchstart', (e) => {
-            startY = e.touches[0].clientY;
-            fp.style.transition = 'none'; // Отключаем плавность на время пальца
-        }, {passive: true});
-
+        fp.addEventListener('touchstart', (e) => { startX = e.touches[0].clientX; startY = e.touches[0].clientY; fp.style.transition = 'none'; }, {passive: true});
         fp.addEventListener('touchmove', (e) => {
-            currentY = e.touches[0].clientY;
-            const diff = currentY - startY;
-            if (diff > 0) fp.style.transform = `translateY(${diff}px)`; // Двигаем вниз
+            currentX = e.touches[0].clientX; currentY = e.touches[0].clientY;
+            const diffX = currentX - startX, diffY = currentY - startY;
+            if (Math.abs(diffY) > Math.abs(diffX) && diffY > 0) fp.style.transform = `translateY(${diffY}px)`;
+            else if (Math.abs(diffX) > Math.abs(diffY)) fp.style.transform = `translateX(${diffX}px)`;
         }, {passive: true});
-
         fp.addEventListener('touchend', (e) => {
-            fp.style.transition = 'transform 0.3s ease, top 0.4s ease'; // Возвращаем плавность
-            const diff = currentY - startY;
-            if (diff > 120) { // Если свайпнули больше 120px - закрываем
-                closeFullPlayer();
-                setTimeout(() => fp.style.transform = '', 400);
-            } else {
-                fp.style.transform = 'translateY(0)'; // Пружиним обратно
-            }
+            fp.style.transition = 'transform 0.3s ease, top 0.4s ease';
+            const diffX = currentX - startX, diffY = currentY - startY;
+            if (Math.abs(diffY) > Math.abs(diffX) && diffY > 120) { closeFullPlayer(); setTimeout(() => fp.style.transform = '', 400); } 
+            else if (Math.abs(diffX) > Math.abs(diffY) && diffX > 100) { playPrev(); fp.style.transform = ''; } 
+            else if (Math.abs(diffX) > Math.abs(diffY) && diffX < -100) { playNext(true); fp.style.transform = ''; } 
+            else fp.style.transform = 'translate(0, 0)';
         });
 
-        // --- ИЗБРАННОЕ ---
+        // --- ИЗБРАННОЕ И ИСТОРИЯ ---
         function toggleFav(track, e) {
             if(e) e.stopPropagation();
             const idx = favorites.findIndex(f => f.id === track.id);
-            if(idx > -1) favorites.splice(idx, 1);
-            else favorites.push(track);
+            if(idx > -1) favorites.splice(idx, 1); else favorites.push(track);
             localStorage.setItem('vds_favs', JSON.stringify(favorites));
             renderFavs();
             if(currentIndex > -1 && currentQueue[currentIndex].id === track.id) updateFavUI(track.id);
-            document.querySelectorAll(`.fav-icon-${track.id}`).forEach(el => {
-                el.innerText = idx > -1 ? '🤍' : '❤️';
-                el.classList.toggle('active', idx === -1);
-            });
+            document.querySelectorAll(`.fav-icon-${track.id}`).forEach(el => { el.innerText = idx > -1 ? '🤍' : '❤️'; el.classList.toggle('active', idx === -1); });
         }
         function isFav(id) { return favorites.some(f => f.id === id); }
-        function updateFavUI(id) {
-            const btn = document.getElementById('fp-fav-btn');
-            const fav = isFav(id);
-            btn.innerText = fav ? '❤️' : '🤍';
-            btn.classList.toggle('active', fav);
-        }
+        function updateFavUI(id) { const btn = document.getElementById('fp-fav-btn'); const fav = isFav(id); btn.innerText = fav ? '❤️' : '🤍'; btn.classList.toggle('active', fav); }
         function toggleFavCurrent() { if(currentIndex > -1) toggleFav(currentQueue[currentIndex]); }
         function renderFavs() { window.favQueue = favorites; document.getElementById('fav-results').innerHTML = favorites.map((t, i) => buildTrackHTML(t, i, 'fav')).join(''); }
 
-        // --- РЕНДЕР ---
-        async function getCover(track) {
-            if(track.itunes_cover) return track.itunes_cover;
-            try {
-                const r = await fetch(`${API}/cover?q=${encodeURIComponent(track.search_query)}`, {headers});
-                const d = await r.json();
-                track.itunes_cover = d.url || track.thumb;
-                return track.itunes_cover;
-            } catch(e) { return track.thumb; }
+        function addToHistory(track) {
+            playHistory = playHistory.filter(t => t.id !== track.id);
+            playHistory.unshift(track);
+            if (playHistory.length > 50) playHistory.pop();
+            localStorage.setItem('vds_history', JSON.stringify(playHistory));
+            renderHistory();
         }
+        function renderHistory() { window.historyQueue = playHistory; document.getElementById('history-results').innerHTML = playHistory.map((t, i) => buildTrackHTML(t, i, 'history')).join(''); }
 
+        // --- РЕНДЕР ---
         function buildTrackHTML(t, i, ctx) {
             const favClass = isFav(t.id) ? 'active' : '';
             const favIcon = isFav(t.id) ? '❤️' : '🤍';
             const trackStr = JSON.stringify(t).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
             return `<div class="track-item" onclick="setQueue(${i}, '${ctx}')">
-                <div class="track-thumb-container">
-                    <img class="track-thumb-bg" src="${t.thumb}">
-                    <img class="track-thumb" src="${t.thumb}" id="list-thumb-${t.id}">
-                </div>
+                <div class="track-thumb-container"><img class="track-thumb" src="${t.thumb}"></div>
                 <div class="track-info">
                     <div class="track-title">${t.title}</div>
                     <div class="track-artist">${t.artist || ''}</div>
@@ -264,7 +255,6 @@
             </div>`;
         }
 
-        // --- Вкладки ---
         function switchTab(id, el) {
             document.querySelectorAll('.tab-view').forEach(t => t.classList.remove('active'));
             document.getElementById('tab-' + id).classList.add('active');
@@ -273,22 +263,19 @@
             if(id === 'random' && !window.randomQueue) loadRandom();
             if(id === 'genres' && document.getElementById('genre-grid').innerHTML === '') renderGenres();
             if(id === 'fav') renderFavs();
+            if(id === 'history') renderHistory();
         }
 
         // --- API ЗАПРОСЫ ---
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            document.getElementById('search-results').innerHTML = "⏳ Поиск...";
+            document.getElementById('search-results').innerHTML = "<div style='text-align:center; margin-top:20px;'>⏳ Ищем...</div>";
             try {
                 const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {headers});
                 const d = await r.json();
                 window.searchQueue = d.tracks;
                 document.getElementById('search-results').innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'search')).join('');
-                d.tracks.forEach(async t => {
-                    const img = document.getElementById(`list-thumb-${t.id}`);
-                    if(img) img.src = await getCover(t);
-                });
             } catch(e) { log(e.message); }
         }
 
@@ -299,24 +286,14 @@
             try {
                 const r = await fetch(`${API}/random`, {headers});
                 const d = await r.json();
-                if(force || !window.randomQueue) {
-                    window.randomQueue = d.tracks;
-                    res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'random')).join('');
-                } else {
-                    const startIdx = window.randomQueue.length;
-                    window.randomQueue = window.randomQueue.concat(d.tracks);
-                    res.innerHTML += d.tracks.map((t, i) => buildTrackHTML(t, startIdx + i, 'random')).join('');
-                }
-                d.tracks.forEach(async t => {
-                    const img = document.getElementById(`list-thumb-${t.id}`);
-                    if(img) img.src = await getCover(t);
-                });
-            } catch(e) { log(e); }
+                if(force || !window.randomQueue) { window.randomQueue = d.tracks; res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'random')).join(''); } 
+                else { const startIdx = window.randomQueue.length; window.randomQueue = window.randomQueue.concat(d.tracks); res.innerHTML += d.tracks.map((t, i) => buildTrackHTML(t, startIdx + i, 'random')).join(''); }
+            } catch(e) {}
         }
 
-        const genres = ["Поп-музыка", "Хип-хоп / Рэп", "Электронная (EDM)", "Афробит", "Инди-рок", "Рок / Метал"];
+        const genres = ["Поп-музыка", "Хип-хоп / Рэп", "Электронная (EDM)", "Афробит", "Инди-рок", "Рок / Метал", "Techno", "Dubstep", "House", "Drum & Bass", "Phonk", "Synthwave", "R&B & Soul", "K-Pop", "Русские хиты", "Acoustic & Folk", "Lo-Fi / Chill", "Jazz & Blues", "Cinematic"];
         function renderGenres() { document.getElementById('genre-grid').innerHTML = genres.map(g => `<div class="genre-card" onclick="loadGenre('${g}')">${g}</div>`).join(''); }
-        function showGenreGrid() { document.getElementById('genre-grid').style.display = 'grid'; document.getElementById('genre-results').style.display = 'none'; document.getElementById('genre-back').style.display = 'none'; document.getElementById('genre-title').innerText = "Жанры"; }
+        function showGenreGrid() { document.getElementById('genre-grid').style.display = 'grid'; document.getElementById('genre-results').style.display = 'none'; document.getElementById('genre-back').style.display = 'none'; document.getElementById('genre-title').innerText = "Жанры музыки"; }
         
         async function loadGenre(g) {
             showGenreGrid(); document.getElementById('genre-grid').style.display = 'none'; document.getElementById('genre-results').style.display = 'flex'; document.getElementById('genre-back').style.display = 'block'; document.getElementById('genre-title').innerText = g;
@@ -326,17 +303,17 @@
                 const d = await r.json();
                 window.genreQueue = d.tracks;
                 document.getElementById('genre-results').innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('');
-                d.tracks.forEach(async t => { const img = document.getElementById(`list-thumb-${t.id}`); if(img) img.src = await getCover(t); });
             } catch(e){}
         }
 
         // --- ВОСПРОИЗВЕДЕНИЕ ---
         function setQueue(index, ctx) {
             currentContext = ctx;
-            if(ctx === 'search') currentQueue = window.searchQueue;
+            if(ctx === 'search') { currentQueue = window.searchQueue; document.getElementById('search-overlay').classList.remove('open'); }
             if(ctx === 'random') currentQueue = window.randomQueue;
             if(ctx === 'genre') currentQueue = window.genreQueue;
             if(ctx === 'fav') currentQueue = window.favQueue;
+            if(ctx === 'history') currentQueue = window.historyQueue;
             nextAudio.removeAttribute('src'); nextAudio.load(); isPreloading = false;
             playTrack(index);
         }
@@ -346,65 +323,48 @@
             currentIndex = index;
             const track = currentQueue[index];
             
+            addToHistory(track);
             updateUI(track);
+            setupMediaSession(track);
             activeAudio.pause();
             
             const overlay = document.getElementById('loading-overlay');
-            overlay.innerText = "⏳ Загрузка...";
-            overlay.style.display = 'flex';
+            overlay.innerText = "⏳ Подключение..."; overlay.style.display = 'flex';
             
             try {
                 const r = await fetch(`${API}/stream/${track.id}?url=${encodeURIComponent(track.yt_url)}`, {headers});
-                
-                // 404 АВТО-СКИП ЛОГИКА
-                if(r.status === 404) {
-                    overlay.innerText = "❌ Трек недоступен. Переключаю...";
-                    log("Трек недоступен, пропускаем: " + track.title);
-                    setTimeout(() => playNext(false), 2000);
-                    return;
-                }
-                if (!r.ok) throw new Error("Server Error");
-
+                if(r.status === 404) { overlay.innerText = "❌ Пропускаем..."; setTimeout(() => playNext(false), 2000); return; }
                 const blob = await r.blob();
                 activeAudio.src = URL.createObjectURL(blob);
-                activeAudio.load();
-                overlay.style.display = 'none';
-                
-                activeAudio.play().then(() => updatePlayState(true)).catch(e => log("Safari блок автоплея"));
-            } catch(e) { 
-                overlay.innerText = "Ошибка загрузки";
-                log("Ошибка стрима: " + e.message); 
-            }
+                activeAudio.load(); overlay.style.display = 'none';
+                activeAudio.play().then(() => updatePlayState(true)).catch(e => log("Блок автоплея"));
+            } catch(e) { overlay.innerText = "Ошибка"; }
             
             if(currentContext === 'random' && index >= currentQueue.length - 3) loadRandom(false);
         }
 
         async function preloadNext() {
-            if(isPreloading || currentIndex + 1 >= currentQueue.length) return;
+            if(isPreloading || currentIndex + 1 >= currentQueue.length || isLooping) return;
             isPreloading = true;
             const nextTrack = currentQueue[currentIndex + 1];
             try {
                 const r = await fetch(`${API}/stream/${nextTrack.id}?url=${encodeURIComponent(nextTrack.yt_url)}`, {headers});
-                if(r.status === 404) return; // Если не найдено, пропустим preload, разберемся при playNext
+                if(r.status === 404) return;
                 const blob = await r.blob();
-                nextAudio.src = URL.createObjectURL(blob);
-                nextAudio.load();
+                nextAudio.src = URL.createObjectURL(blob); nextAudio.load();
             } catch(e) { isPreloading = false; }
         }
 
         function playNext(manual = false) {
+            if(isLooping && !manual) { playTrack(currentIndex); return; } // Повтор
             if(currentIndex + 1 >= currentQueue.length) return;
+            
             if(!manual && isPreloading && nextAudio.src) {
-                activeAudio.pause();
-                const temp = activeAudio; activeAudio = nextAudio; nextAudio = temp;
-                currentIndex++;
-                updateUI(currentQueue[currentIndex]);
-                activeAudio.play();
-                isPreloading = false;
-                nextAudio.removeAttribute('src');
-            } else {
-                playTrack(currentIndex + 1);
-            }
+                activeAudio.pause(); const temp = activeAudio; activeAudio = nextAudio; nextAudio = temp;
+                currentIndex++; const track = currentQueue[currentIndex];
+                addToHistory(track); updateUI(track); setupMediaSession(track);
+                activeAudio.play(); isPreloading = false; nextAudio.removeAttribute('src');
+            } else { playTrack(currentIndex + 1); }
         }
 
         function playPrev() { playTrack(currentIndex - 1); }
@@ -413,25 +373,18 @@
             updateProgress(activeAudio);
             if(activeAudio.duration && (activeAudio.duration - activeAudio.currentTime) < 30 && !isPreloading) preloadNext();
         });
-        nextAudio.addEventListener('timeupdate', () => { updateProgress(nextAudio); });
         activeAudio.onended = () => playNext(false);
-        nextAudio.onended = () => playNext(false);
 
-        // --- УПРАВЛЕНИЕ UI ---
-        async function updateUI(track) {
+        // --- УПРАВЛЕНИЕ UI И СИСТЕМОЙ ---
+        function updateUI(track) {
             document.getElementById('mini-player').style.display = 'flex';
             document.getElementById('mp-title').innerText = track.title;
             document.getElementById('mp-artist').innerText = track.artist || '';
             document.getElementById('fp-title').innerText = track.title;
             document.getElementById('fp-artist').innerText = track.artist || '';
             updateFavUI(track.id);
-            
-            const setImg = (id, src) => document.getElementById(id).src = src;
-            setImg('mp-thumb-bg', track.thumb); setImg('mp-thumb', track.thumb);
-            setImg('fp-cover-bg', track.thumb); setImg('fp-cover', track.thumb);
-
-            const cover = await getCover(track);
-            setImg('mp-thumb', cover); setImg('fp-cover', cover);
+            document.getElementById('mp-thumb').src = track.thumb;
+            document.getElementById('fp-cover').src = track.thumb;
         }
 
         function togglePlay(e) {
@@ -445,24 +398,41 @@
             document.getElementById('fp-play-btn').innerText = isPlaying ? '⏸' : '▶';
         }
 
-        const progBar = document.getElementById('progress');
-        const tCur = document.getElementById('time-cur');
-        const tTot = document.getElementById('time-tot');
+        function toggleLoop() {
+            isLooping = !isLooping;
+            document.getElementById('loop-btn').innerText = isLooping ? '🔂' : '🔁';
+            document.getElementById('loop-btn').classList.toggle('active', isLooping);
+        }
+
+        // --- MEDIA SESSION API (Экран блокировки) ---
+        function setupMediaSession(track) {
+            if ('mediaSession' in navigator) {
+                navigator.mediaSession.metadata = new MediaMetadata({
+                    title: track.title,
+                    artist: track.artist || 'VDS Music',
+                    artwork: [{ src: track.thumb, sizes: '512x512', type: 'image/jpeg' }]
+                });
+                navigator.mediaSession.setActionHandler('play', () => togglePlay());
+                navigator.mediaSession.setActionHandler('pause', () => togglePlay());
+                navigator.mediaSession.setActionHandler('previoustrack', () => playPrev());
+                navigator.mediaSession.setActionHandler('nexttrack', () => playNext(true));
+            }
+        }
+
+        const progBar = document.getElementById('progress'); const tCur = document.getElementById('time-cur'); const tTot = document.getElementById('time-tot');
         function updateProgress(audioEl) {
             if(audioEl !== activeAudio) return;
             if(audioEl.duration) {
-                progBar.max = audioEl.duration;
-                progBar.value = audioEl.currentTime;
-                tCur.innerText = formatTime(audioEl.currentTime);
-                tTot.innerText = formatTime(audioEl.duration);
+                progBar.max = audioEl.duration; progBar.value = audioEl.currentTime;
+                tCur.innerText = formatTime(audioEl.currentTime); tTot.innerText = formatTime(audioEl.duration);
             }
         }
         function seekAudio(val) { activeAudio.currentTime = val; }
-        function formatTime(s) {
-            if(isNaN(s)) return "0:00";
-            const m = Math.floor(s / 60), sec = Math.floor(s % 60);
-            return `${m}:${sec < 10 ? '0' : ''}${sec}`;
-        }
+        function formatTime(s) { if(isNaN(s)) return "0:00"; const m = Math.floor(s / 60), sec = Math.floor(s % 60); return `${m}:${sec < 10 ? '0' : ''}${sec}`; }
+
+        // Инициализация при старте
+        loadRandom();
+        renderHistory();
     </script>
 </body>
 </html>
