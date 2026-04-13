@@ -3,27 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Vibe Player PRO</title>
+    <title>VDS Music Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
         body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 180px; }
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
         input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px; }
-        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); font-weight: bold; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color:#000; font-weight: bold; }
         .track-card { background: var(--card); padding: 12px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
         #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 20px; box-sizing: border-box; display: none; }
         audio { width: 100%; filter: invert(100%) brightness(1.5); }
-        #log { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; margin-top: 20px; max-height: 80px; overflow-y: auto; }
+        #status-log { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; margin-top: 20px; border: 1px solid #333; max-height: 100px; overflow-y: auto; }
     </style>
 </head>
 <body>
     <div class="search-row">
-        <input id="q" type="text" placeholder="Поиск музыки...">
-        <button class="btn" onclick="search()">Найти</button>
+        <input id="q" type="text" placeholder="Название песни или артист...">
+        <button class="btn" onclick="search()">Поиск</button>
     </div>
     <div id="results"></div>
-    <div id="log">Статус: Авторизован через Ngrok</div>
+    <div id="status-log">Система: Подключено. Жду запрос...</div>
     <div id="player-bar">
         <div id="now-playing" style="font-size: 13px; margin-bottom: 10px; color: var(--accent); font-weight: bold;"></div>
         <audio id="audio" controls autoplay playsinline></audio>
@@ -32,22 +32,25 @@
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        // Убедись, что этот адрес совпадает с тем, что в vds_bot.py
         const API = "https://surround-subpar-distort.ngrok-free.dev";
 
-        function addLog(msg) {
-            document.getElementById('log').innerText += "\n> " + msg;
+        function log(msg) {
+            const l = document.getElementById('status-log');
+            l.innerText += "\n> " + msg;
+            l.scrollTop = l.scrollHeight;
         }
 
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            document.getElementById('results').innerHTML = "⏳ Поиск...";
+            log("Ищу: " + q);
+            document.getElementById('results').innerHTML = "<p style='text-align:center'>⏳ Поиск в YouTube...</p>";
             try {
-                const response = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
                     headers: { "ngrok-skip-browser-warning": "69420" }
                 });
-                const data = await response.json();
+                const data = await r.json();
+                log("Результатов: " + (data.tracks ? data.tracks.length : 0));
                 let html = '';
                 data.tracks.forEach(t => {
                     html += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
@@ -56,15 +59,20 @@
                     </div>`;
                 });
                 document.getElementById('results').innerHTML = html;
-            } catch (e) { addLog("Ошибка поиска: " + e.message); }
+            } catch (e) { log("ОШИБКА: " + e.message); }
         }
 
         function play(id, url, title) {
             const audio = document.getElementById('audio');
             document.getElementById('player-bar').style.display = 'block';
             document.getElementById('now-playing').innerText = "🎶 " + title;
+            log("Загрузка потока...");
             audio.src = `${API}/stream/${id}?url=${url}`;
-            audio.play().catch(e => addLog("Ошибка Safari: " + e.name));
+            
+            audio.play().then(() => log("▶ Играет: " + title))
+            .catch(e => log("❌ Ошибка Safari: " + e.message));
+
+            audio.onerror = () => log("❌ Ошибка аудио-тега!");
         }
     </script>
 </body>
