@@ -1,92 +1,73 @@
 <!DOCTYPE html>
 <html lang="ru">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Vibe Player Debug</title>
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
-<style>
-  :root { --accent: #FFCC00; --bg: #0e0e0e; --text: #fff; }
-  body { background: var(--bg); color: var(--text); font-family: sans-serif; margin: 0; padding: 20px; padding-bottom: 150px; }
-  .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
-  input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
-  .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); font-weight: bold; }
-  .track-card { background: #1a1a1a; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #333; }
-  #player { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 15px; border-top: 1px solid #333; display: none; z-index: 1000; }
-  audio { width: 100%; filter: invert(1); }
-  /* СТИЛИ ДЛЯ ЛОГОВ */
-  #debug-log { background: #000; color: #0f0; font-family: monospace; font-size: 10px; padding: 10px; height: 80px; overflow-y: auto; border: 1px solid #333; margin-top: 20px; border-radius: 8px; }
-</style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <title>Vibe Player</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { background: #0e0e0e; color: #fff; font-family: sans-serif; margin: 0; padding: 15px; }
+        .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
+        input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
+        button { padding: 12px 20px; border-radius: 10px; border: none; background: #FFCC00; font-weight: bold; }
+        .track-card { background: #1a1a1a; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #333; }
+        #player { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 15px; border-top: 1px solid #333; display: none; }
+        audio { width: 100%; filter: invert(1); }
+        #log { font-size: 10px; color: #555; margin-top: 10px; white-space: pre-wrap; }
+    </style>
 </head>
 <body>
+    <div class="search-box">
+        <input id="q" type="text" placeholder="Поиск музыки...">
+        <button onclick="search()">Найти</button>
+    </div>
+    <div id="results"></div>
+    <div id="log">Статус: Готов</div>
+    <div id="player">
+        <div id="track-title" style="margin-bottom:10px; font-size:14px; font-weight:bold;"></div>
+        <audio id="audio" controls autoplay></audio>
+    </div>
 
-<div class="search-row">
-  <input id="q" type="text" placeholder="Введите название...">
-  <button class="btn" onclick="search()">🔍</button>
-</div>
+    <script>
+        let tg = window.Telegram.WebApp;
+        tg.expand(); // Разворачиваем на весь экран
+        
+        const API = "http://72.56.96.49:8000"; 
 
-<div id="results"></div>
+        function writeLog(text) {
+            document.getElementById('log').innerText += "\n" + text;
+        }
 
-<div id="debug-log">Система: Ожидание запроса...</div>
+        async function search() {
+            const query = document.getElementById('q').value;
+            if(!query) return;
+            writeLog("🔍 Ищу: " + query);
+            
+            try {
+                const response = await fetch(`${API}/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                writeLog("✅ Найдено: " + data.tracks.length);
+                
+                let html = '';
+                data.tracks.forEach(t => {
+                    html += `<div class="track-card" onclick="playTrack('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
+                        <b>${t.title}</b><br><small style="color:#888">${t.artist}</small>
+                    </div>`;
+                });
+                document.getElementById('results').innerHTML = html;
+            } catch (e) {
+                writeLog("❌ Ошибка: " + e.message);
+            }
+        }
 
-<div id="player">
-  <div id="track-title" style="font-weight:bold; margin-bottom:10px; font-size:14px;"></div>
-  <audio id="audio" controls autoplay></audio>
-</div>
-
-<script>
-  let tg = window.Telegram.WebApp;
-  tg.expand();
-
-  const API = "http://72.56.96.49:8000"; 
-
-  function log(msg) {
-    const logEl = document.getElementById('debug-log');
-    logEl.innerHTML += `<br>> ${msg}`;
-    logEl.scrollTop = logEl.scrollHeight;
-  }
-
-  async function search() {
-    const q = document.getElementById('q').value;
-    if(!q) return;
-    
-    log(`Начинаю поиск: ${q}`);
-    document.getElementById('results').innerHTML = "⏳ Поиск...";
-    
-    try {
-      const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
-      log(`Статус ответа: ${r.status}`);
-      const data = await r.json();
-      
-      log(`Найдено треков: ${data.tracks.length}`);
-      let html = '';
-      data.tracks.forEach(t => {
-        html += `
-          <div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
-            <b>${t.title}</b><br><small style="color:#888">${t.artist}</small>
-          </div>`;
-      });
-      document.getElementById('results').innerHTML = html;
-    } catch (e) {
-      log(`ОШИБКА ПОИСКА: ${e.message}`);
-      document.getElementById('results').innerHTML = "❌ Ошибка. Проверь логи внизу.";
-    }
-  }
-
-  function play(id, url, title) {
-    log(`Запуск потока для: ${decodeURIComponent(title)}`);
-    document.getElementById('player').style.display = 'block';
-    document.getElementById('track-title').innerText = decodeURIComponent(title);
-    
-    const audio = document.getElementById('audio');
-    const streamUrl = `${API}/stream/${id}?url=${url}`;
-    log(`URL стрима: ${streamUrl}`);
-    
-    audio.src = streamUrl;
-    audio.onerror = (e) => log(`ОШИБКА ПЛЕЕРА: Ошибка загрузки аудио`);
-    audio.onplay = () => log(`▶ Воспроизведение началось`);
-    audio.play();
-  }
-</script>
+        function playTrack(id, url, title) {
+            writeLog("🎵 Запуск: " + title);
+            document.getElementById('player').style.display = 'block';
+            document.getElementById('track-title').innerText = title;
+            const audio = document.getElementById('audio');
+            audio.src = `${API}/stream/${id}?url=${url}`;
+            audio.play().catch(err => writeLog("🚫 Ошибка плеера: " + err.message));
+        }
+    </script>
 </body>
 </html>
