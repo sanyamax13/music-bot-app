@@ -3,90 +3,105 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>VDS Music App</title>
+    <title>Vibe Player</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --yandex-yellow: #FFCC00; --bg: #000; --card: #1A1A1A; }
-        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; padding: 0; padding-bottom: 100px; }
-        
-        .nav-tabs { display: flex; justify-content: space-around; background: #111; padding: 15px 0; position: sticky; top: 0; z-index: 10; }
-        .tab { color: #888; font-weight: bold; font-size: 14px; cursor: pointer; }
-        .tab.active { color: var(--yandex-yellow); }
-
+        body { background: var(--bg); color: white; font-family: sans-serif; margin: 0; padding: 0; padding-bottom: 120px; }
+        .nav-tabs { display: flex; justify-content: space-around; background: #111; padding: 15px 0; position: sticky; top: 0; z-index: 10; border-bottom: 1px solid #222; }
+        .tab { color: #888; font-weight: bold; font-size: 14px; cursor: pointer; padding: 5px 10px; }
+        .tab.active { color: var(--yandex-yellow); border-bottom: 2px solid var(--yandex-yellow); }
         .section { padding: 20px; }
-        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-top: 15px; }
-        .genre-card { background: var(--card); padding: 20px; border-radius: 15px; text-align: center; font-weight: bold; }
-        
-        .track-item { display: flex; align-items: center; background: var(--card); padding: 10px; border-radius: 12px; margin-bottom: 10px; }
-        .track-info { margin-left: 15px; flex-grow: 1; }
-        .play-btn { background: var(--yandex-yellow); border: none; border-radius: 50%; width: 35px; height: 35px; font-weight: bold; }
-
-        /* Нижний плеер */
-        .bottom-player { position: fixed; bottom: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 15px; display: none; box-sizing: border-box; }
-        audio { width: 100%; height: 30px; margin-top: 10px; filter: invert(1); }
+        .genre-card { background: var(--card); padding: 25px; border-radius: 15px; text-align: center; font-weight: bold; border-left: 5px solid var(--yandex-yellow); }
+        .track-item { display: flex; align-items: center; background: var(--card); padding: 12px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #222; }
+        .track-info { margin-left: 15px; flex-grow: 1; overflow: hidden; }
+        .track-info b { display: block; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+        .play-btn { background: var(--yandex-yellow); border: none; border-radius: 50%; width: 40px; height: 40px; font-weight: bold; flex-shrink: 0; }
+        .bottom-player { position: fixed; bottom: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 15px; box-sizing: border-box; }
+        audio { width: 100%; height: 35px; margin-top: 10px; filter: invert(1); }
+        input { width: 100%; padding: 15px; border-radius: 12px; border: 1px solid #333; background: #111; color: white; box-sizing: border-box; }
+        .search-btn { width: 100%; padding: 15px; background: var(--yandex-yellow); border: none; border-radius: 12px; font-weight: bold; margin-top: 10px; }
     </style>
 </head>
 <body>
     <div class="nav-tabs">
-        <div class="tab active" onclick="showSec('home')">Главная</div>
-        <div class="tab" onclick="showSec('charts')">Чарты</div>
-        <div class="tab" onclick="showSec('genres')">Жанры</div>
+        <div class="tab active" onclick="showSec('home', this)">Главная</div>
+        <div class="tab" onclick="showSec('charts', this)">Чарты</div>
+        <div class="tab" onclick="showSec('genres', this)">Жанры</div>
     </div>
 
     <div id="home" class="section">
-        <h2 style="color: var(--yandex-yellow);">Для тебя</h2>
-        <input type="text" id="search" placeholder="Поиск..." style="width:90%; padding:12px; border-radius:10px; border:none; background:#222; color:white;">
-        <button onclick="searchMusic()" style="margin-top:10px; width:95%; padding:12px; background:var(--yandex-yellow); border:none; border-radius:10px; font-weight:bold;">Найти</button>
-        
-        <div id="results" style="margin-top:20px;"></div>
+        <h2 style="color: var(--yandex-yellow);">Поиск музыки</h2>
+        <input type="text" id="search" placeholder="Артист или название...">
+        <button class="search-btn" onclick="apiSearch()">НАЙТИ И ИГРАТЬ</button>
+        <div id="status" style="margin-top: 15px; color: #888; font-size: 14px;"></div>
     </div>
 
     <div id="charts" class="section" style="display:none;">
         <h2 style="color: var(--yandex-yellow);">Топ недели</h2>
-        <div class="track-item">
-            <div class="play-btn" onclick="playTrack('http://72.56.96.49:8000/play/top1', 'Track 1')">▶</div>
-            <div class="track-info"><b>Кино - Группа крови</b><br><small>Legend</small></div>
-        </div>
+        <div id="charts-list">Загрузка чартов...</div>
     </div>
 
     <div id="genres" class="section" style="display:none;">
         <h2>Жанры</h2>
-        <div class="grid">
-            <div class="genre-card" style="border-left: 5px solid red;">Rock</div>
-            <div class="genre-card" style="border-left: 5px solid blue;">Lo-Fi</div>
-            <div class="genre-card" style="border-left: 5px solid green;">Rap</div>
-            <div class="genre-card" style="border-left: 5px solid purple;">Phonk</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+            <div class="genre-card" onclick="apiSearch('Phonk')">Phonk</div>
+            <div class="genre-card" onclick="apiSearch('Lo-fi')">Lo-fi</div>
+            <div class="genre-card" onclick="apiSearch('Rock')">Rock</div>
+            <div class="genre-card" onclick="apiSearch('Rap')">Rap</div>
         </div>
     </div>
 
-    <div class="bottom-player" id="player-ui">
-        <div id="current-title">Название трека</div>
+    <div class="bottom-player" id="player-ui" style="display: none;">
+        <div id="current-title" style="font-size: 14px; font-weight: bold;"></div>
         <audio id="main-audio" controls autoplay></audio>
     </div>
 
     <script>
         let tg = window.Telegram.WebApp;
         tg.expand();
+        const SERVER = "http://72.56.96.49:8000";
 
-        function showSec(id) {
+        function showSec(id, el) {
             document.querySelectorAll('.section').forEach(s => s.style.display = 'none');
             document.getElementById(id).style.display = 'block';
             document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
-            event.target.classList.add('active');
+            el.classList.add('active');
+            if(id === 'charts') loadCharts();
         }
 
-        async function searchMusic() {
-            let q = document.getElementById('search').value;
-            if(!q) return;
-            // В реальном приложении мы шлем запрос на API сервера
-            // Для теста используем tg.sendData чтобы бот скачал и прислал ссылку (упрощенно)
-            tg.sendData(q);
+        async function apiSearch(q) {
+            let query = q || document.getElementById('search').value;
+            if(!query) return;
+            document.getElementById('status').innerText = "⏳ Ищем на сервере...";
+            
+            try {
+                const response = await fetch(`${SERVER}/api/search?q=${encodeURIComponent(query)}`);
+                const data = await response.json();
+                playTrack(data.url, data.title);
+                document.getElementById('status').innerText = "✅ Играет: " + data.title;
+            } catch (e) {
+                document.getElementById('status').innerText = "❌ Ошибка загрузки";
+            }
+        }
+
+        async function loadCharts() {
+            const res = await fetch(`${SERVER}/api/charts`);
+            const data = await res.json();
+            let html = '';
+            data.forEach(t => {
+                html += `<div class="track-item">
+                    <button class="play-btn" onclick="apiSearch('${t.query}')">▶</button>
+                    <div class="track-info"><b>${t.title}</b><small>${t.artist}</small></div>
+                </div>`;
+            });
+            document.getElementById('charts-list').innerHTML = html;
         }
 
         function playTrack(url, title) {
             document.getElementById('player-ui').style.display = 'block';
             document.getElementById('current-title').innerText = title;
-            let audio = document.getElementById('main-audio');
+            const audio = document.getElementById('main-audio');
             audio.src = url;
             audio.play();
         }
