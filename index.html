@@ -7,27 +7,26 @@
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
-        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 180px; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 150px; }
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
-        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px; }
-        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color:#000; font-weight: bold; }
-        .track-card { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center; }
-        .track-card:active { background: #222; }
-        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 20px; box-sizing: border-box; display: none; }
-        audio { width: 100%; filter: invert(100%) brightness(1.5); }
-        #log-window { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 10px; margin-top: 20px; border: 1px solid #333; max-height: 100px; overflow-y: auto; }
+        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); font-weight: bold; }
+        .track-card { background: var(--card); padding: 15px; border-radius: 15px; margin-bottom: 10px; display: flex; justify-content: space-between; align-items: center; border: 1px solid #222; }
+        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 20px; box-sizing: border-box; display: none; border-top: 1px solid #333; }
+        audio { width: 100%; filter: invert(1); }
+        #log { font-size: 10px; color: #00ff00; background: #000; padding: 10px; border-radius: 10px; margin-top: 20px; overflow: hidden; }
     </style>
 </head>
 <body>
     <div class="search-row">
-        <input id="q" type="text" placeholder="Артист или песня...">
-        <button class="btn" onclick="search()">Поиск</button>
+        <input id="q" type="text" placeholder="Поиск музыки...">
+        <button class="btn" onclick="search()">🔍</button>
     </div>
     <div id="results"></div>
-    <div id="log-window">Система: Подключено.</div>
+    <div id="log">Логи: Ожидание...</div>
     <div id="player-bar">
-        <div id="now-playing" style="font-size: 13px; margin-bottom: 10px; color: var(--accent); font-weight: bold;"></div>
-        <audio id="audio" controls playsinline></audio>
+        <div id="title" style="font-size: 13px; margin-bottom: 10px; color: var(--accent);"></div>
+        <audio id="audio" controls playsinline preload="auto"></audio>
     </div>
 
     <script>
@@ -35,51 +34,39 @@
         tg.expand();
         const API = "https://surround-subpar-distort.ngrok-free.dev";
 
-        function addLog(msg) {
-            const l = document.getElementById('log-window');
-            l.innerText += "\n> " + msg;
-            l.scrollTop = l.scrollHeight;
-        }
+        function log(m) { document.getElementById('log').innerText += "\n> " + m; }
 
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            addLog("Запрос поиска: " + q);
-            document.getElementById('results').innerHTML = "<p style='text-align:center'>⏳ Поиск...</p>";
+            log("Ищу: " + q);
             try {
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
-                    headers: { "ngrok-skip-browser-warning": "69420" }
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { headers: {"ngrok-skip-browser-warning": "1"} });
+                const d = await r.json();
+                let h = '';
+                d.tracks.forEach(t => {
+                    h += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
+                        <div><b>${t.title}</b><br><small>${t.artist}</small></div><div>▶</div></div>`;
                 });
-                const data = await r.json();
-                addLog("Найдено треков: " + (data.tracks ? data.tracks.length : 0));
-                let html = '';
-                data.tracks.forEach(t => {
-                    html += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
-                        <div><b>${t.title}</b><br><small style="color:#888">${t.artist}</small></div>
-                        <div style="color:var(--accent)">▶</div>
-                    </div>`;
-                });
-                document.getElementById('results').innerHTML = html;
-            } catch (e) { addLog("Ошибка API: " + e.message); }
+                document.getElementById('results').innerHTML = h;
+            } catch (e) { log("Ошибка: " + e.message); }
         }
 
         function play(id, url, title) {
-            const audio = document.getElementById('audio');
+            const a = document.getElementById('audio');
             document.getElementById('player-bar').style.display = 'block';
-            document.getElementById('now-playing').innerText = "🎶 " + title;
-            addLog("Подготовка стрима...");
+            document.getElementById('title').innerText = title;
+            log("Загрузка: " + title);
             
-            // Сброс для iOS
-            audio.pause();
-            audio.src = "";
-            audio.load();
-
-            setTimeout(() => {
-                audio.src = `${API}/stream/${id}?url=${url}`;
-                audio.play()
-                    .then(() => addLog("✅ Воспроизведение..."))
-                    .catch(err => addLog("❌ Блок Safari: " + err.message));
-            }, 150);
+            a.pause();
+            a.src = `${API}/stream/${id}?url=${url}`;
+            a.load(); 
+            
+            let playPromise = a.play();
+            if (playPromise !== undefined) {
+                playPromise.then(() => { log("✅ Играет"); })
+                .catch(e => { log("❌ Safari блок: " + e.name); });
+            }
         }
     </script>
 </body>
