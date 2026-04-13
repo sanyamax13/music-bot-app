@@ -3,41 +3,35 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>VDS Debug Console</title>
+    <title>VDS Music PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
         body { background: var(--bg); color: var(--text); font-family: -apple-system, sans-serif; margin: 0; padding: 20px; padding-bottom: 200px; }
         .search-row { display: flex; gap: 10px; margin-bottom: 20px; }
-        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
+        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px;}
         .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); font-weight: bold; }
-        .track-card { background: var(--card); padding: 12px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #222; display: flex; justify-content: space-between; }
+        .track-card { background: var(--card); padding: 15px; border-radius: 12px; margin-bottom: 8px; border: 1px solid #222; display: flex; justify-content: space-between; align-items: center;}
         
-        #debug-panel { background: #000; color: #00ff00; font-family: monospace; font-size: 10px; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px; }
-        .err { color: #ff4444; }
-        .ok { color: #00ff00; }
+        #debug-panel { background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 15px; border-radius: 12px; border: 1px solid #444; margin-top: 20px; max-height: 120px; overflow-y: auto;}
         
         #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 20px; box-sizing: border-box; display: none; border-top: 1px solid #333; }
         audio { width: 100%; filter: invert(1); }
+        .progress-text { color: var(--accent); font-size: 12px; margin-top: 5px; }
     </style>
 </head>
 <body>
     <div class="search-row">
-        <input id="q" type="text" placeholder="Поиск для теста...">
+        <input id="q" type="text" placeholder="Поиск трека...">
         <button class="btn" onclick="search()">Найти</button>
     </div>
     <div id="results"></div>
 
-    <div id="debug-panel">
-        <div style="color: var(--accent); font-weight: bold; margin-bottom: 5px;">🔧 ДИАГНОСТИКА SAFARI:</div>
-        <div id="diag-support">Проверка поддержки MP3...</div>
-        <div id="diag-last-err" class="err">Ошибок пока нет.</div>
-        <hr style="border: 0; border-top: 1px solid #333; margin: 10px 0;">
-        <div id="diag-log">Ожидание действий...</div>
-    </div>
+    <div id="debug-panel">Система загружена. Обход Ngrok активирован.</div>
 
     <div id="player-bar">
-        <div id="track-name" style="font-size: 12px; margin-bottom: 8px;"></div>
+        <div id="track-name" style="font-size: 14px; font-weight: bold; margin-bottom: 5px;"></div>
+        <div id="loading-status" class="progress-text"></div>
         <audio id="audio" controls playsinline></audio>
     </div>
 
@@ -45,61 +39,75 @@
         const tg = window.Telegram.WebApp;
         tg.expand();
         const API = "https://surround-subpar-distort.ngrok-free.dev";
+        let currentObjectUrl = null;
 
-        // Проверка поддержки при загрузке
-        const audioTest = document.createElement('audio');
-        const canMP3 = audioTest.canPlayType('audio/mpeg');
-        document.getElementById('diag-support').innerHTML = `Поддержка audio/mpeg: <b class="${canMP3 ? 'ok':'err'}">${canMP3 || 'НЕТ'}</b>`;
-
-        function addDiag(msg, isErr = false) {
-            const log = document.getElementById('diag-log');
-            const time = new Date().toLocaleTimeString().split(' ')[0];
-            log.innerHTML = `[${time}] ${isErr ? '<span class="err">!</span> ' : ''}${msg}<br>` + log.innerHTML;
+        function log(msg) {
+            const panel = document.getElementById('debug-panel');
+            panel.innerHTML += `\n> ${msg}`;
+            panel.scrollTop = panel.scrollHeight;
         }
 
         async function search() {
             const q = document.getElementById('q').value;
             if(!q) return;
-            addDiag("Запрос поиска: " + q);
+            log("Ищу: " + q);
+            document.getElementById('results').innerHTML = "<p style='text-align:center'>⏳ Поиск...</p>";
             try {
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { headers: {"ngrok-skip-browser-warning":"1"} });
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { 
+                    headers: {"ngrok-skip-browser-warning":"69420"} 
+                });
                 const d = await r.json();
-                addDiag("Найдено: " + d.tracks.length);
+                log("Найдено: " + d.tracks.length);
                 let h = '';
                 d.tracks.forEach(t => {
                     h += `<div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
-                        <span>${t.title}</span><span style="color:var(--accent)">▶</span></div>`;
+                        <div><b>${t.title}</b><br><small style="color:#888">${t.artist}</small></div>
+                        <div style="color:var(--accent)">▶</div></div>`;
                 });
                 document.getElementById('results').innerHTML = h;
-            } catch (e) { addDiag("Ошибка сети: " + e.message, true); }
+            } catch (e) { log("Ошибка поиска: " + e.message); }
         }
 
-        function play(id, url, title) {
+        async function play(id, url, title) {
             const a = document.getElementById('audio');
+            const status = document.getElementById('loading-status');
+            
             document.getElementById('player-bar').style.display = 'block';
             document.getElementById('track-name').innerText = title;
             
-            const streamUrl = `${API}/stream/${id}?url=${url}`;
-            addDiag("🔗 Ссылка: " + streamUrl);
-            
+            // Сбрасываем старый трек
             a.pause();
-            a.src = streamUrl;
-            a.load();
-
-            a.oncanplay = () => addDiag("✅ Браузер готов играть файл");
-            a.onloadstart = () => addDiag("📥 Начало загрузки данных...");
+            if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
             
-            a.onerror = () => {
-                const errs = ["ABORTED", "NETWORK", "DECODE", "SRC_NOT_SUPPORTED"];
-                const msg = `ОШИБКА: ${errs[a.error.code - 1] || 'UNKNOWN'}`;
-                document.getElementById('diag-last-err').innerText = msg;
-                addDiag(msg, true);
-            };
+            status.innerText = "⏳ Скачивание аудио (обход защиты)...";
+            log("Загрузка в память: " + title);
 
-            a.play().then(() => addDiag("🎵 Играет")).catch(e => {
-                addDiag("🚫 Блок: " + e.name, true);
-                document.getElementById('diag-last-err').innerText = "Safari Block: " + e.name;
-            });
+            try {
+                // Скачиваем аудио через fetch, чтобы передать заголовки!
+                const response = await fetch(`${API}/stream/${id}?url=${url}`, {
+                    headers: { "ngrok-skip-browser-warning": "69420" }
+                });
+
+                if (!response.ok) throw new Error("Сервер вернул ошибку");
+
+                // Превращаем ответ в аудио-файл внутри браузера
+                const blob = await response.blob();
+                currentObjectUrl = URL.createObjectURL(blob);
+
+                status.innerText = ""; // Прячем статус
+                log("✅ Файл загружен в память. Запуск...");
+
+                // Отдаем чистый файл плееру
+                a.src = currentObjectUrl;
+                a.load();
+                
+                a.play().then(() => log("🎵 Музыка играет!"))
+                .catch(e => log("❌ Ошибка автоплея: Нажми Play вручную."));
+
+            } catch (e) {
+                status.innerText = "❌ Ошибка загрузки";
+                log("Критическая ошибка: " + e.message);
+            }
         }
     </script>
 </body>
