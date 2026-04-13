@@ -2,71 +2,111 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <title>Vibe Player</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <title>Vibe Player PRO</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
-        body { background: #0e0e0e; color: #fff; font-family: sans-serif; margin: 0; padding: 15px; }
-        .search-box { display: flex; gap: 8px; margin-bottom: 20px; }
-        input { flex: 1; padding: 12px; border-radius: 10px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; }
-        button { padding: 12px 20px; border-radius: 10px; border: none; background: #FFCC00; font-weight: bold; }
-        .track-card { background: #1a1a1a; padding: 15px; border-radius: 12px; margin-bottom: 10px; border: 1px solid #333; }
-        #player { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; padding: 15px; border-top: 1px solid #333; display: none; }
-        audio { width: 100%; filter: invert(1); }
-        #log { font-size: 10px; color: #555; margin-top: 10px; white-space: pre-wrap; }
+        :root { --accent: #FFCC00; --bg: #0b0b0b; --card: #161616; --text: #eee; }
+        body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, sans-serif; margin: 0; padding: 20px; overflow-x: hidden; }
+        
+        .search-row { display: flex; gap: 10px; margin-bottom: 20px; position: sticky; top: 10px; z-index: 10; }
+        input { flex: 1; padding: 14px; border-radius: 12px; border: 1px solid #333; background: #1a1a1a; color: #fff; outline: none; font-size: 16px; }
+        .btn { padding: 12px 20px; border-radius: 12px; border: none; background: var(--accent); color: #000; font-weight: bold; cursor: pointer; }
+
+        .track-card { display: flex; align-items: center; gap: 12px; background: var(--card); padding: 12px; border-radius: 15px; margin-bottom: 10px; border: 1px solid #222; transition: 0.2s; }
+        .track-card:active { transform: scale(0.98); background: #222; }
+        .track-info { flex: 1; min-width: 0; }
+        .track-title { font-size: 15px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .track-artist { font-size: 13px; color: #888; }
+
+        #player-bar { position: fixed; bottom: 0; left: 0; width: 100%; background: #111; border-top: 1px solid #333; padding: 15px; display: none; box-sizing: border-box; }
+        audio { width: 100%; height: 40px; filter: invert(100%) hue-rotate(180deg) brightness(1.5); }
+        
+        #log-window { margin-top: 20px; background: #000; color: #00ff00; font-family: monospace; font-size: 11px; padding: 10px; border-radius: 8px; border: 1px solid #333; max-height: 100px; overflow-y: auto; }
     </style>
 </head>
 <body>
-    <div class="search-box">
-        <input id="q" type="text" placeholder="Поиск музыки...">
-        <button onclick="search()">Найти</button>
+
+    <div class="search-row">
+        <input id="q" type="text" placeholder="Поиск музыки..." onkeydown="if(event.key==='Enter')search()">
+        <button class="btn" onclick="search()">🔍</button>
     </div>
+
     <div id="results"></div>
-    <div id="log">Статус: Готов</div>
-    <div id="player">
-        <div id="track-title" style="margin-bottom:10px; font-size:14px; font-weight:bold;"></div>
+
+    <div id="log-window">Система: Готов к работе</div>
+
+    <div id="player-bar">
+        <div id="now-playing" style="font-size: 13px; margin-bottom: 8px; color: var(--accent); font-weight: bold;"></div>
         <audio id="audio" controls autoplay></audio>
     </div>
 
     <script>
-        let tg = window.Telegram.WebApp;
-        tg.expand(); // Разворачиваем на весь экран
-        
-        const API = "http://72.56.96.49:8000"; 
+        const tg = window.Telegram.WebApp;
+        tg.expand();
 
-        function writeLog(text) {
-            document.getElementById('log').innerText += "\n" + text;
+        // ТВОЙ АКТУАЛЬНЫЙ АДРЕС NGROK
+        const API = "https://surround-subpar-distort.ngrok-free.dev";
+
+        function addLog(msg) {
+            const l = document.getElementById('log-window');
+            l.innerText += "\n> " + msg;
+            l.scrollTop = l.scrollHeight;
         }
 
         async function search() {
-            const query = document.getElementById('q').value;
-            if(!query) return;
-            writeLog("🔍 Ищу: " + query);
-            
+            const q = document.getElementById('q').value;
+            if(!q) return;
+
+            addLog("Запрос: " + q);
+            document.getElementById('results').innerHTML = "<p style='text-align:center'>⏳ Ищу треки...</p>";
+
             try {
-                const response = await fetch(`${API}/search?q=${encodeURIComponent(query)}`);
+                const response = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, {
+                    headers: { "ngrok-skip-browser-warning": "69420" }
+                });
                 const data = await response.json();
-                writeLog("✅ Найдено: " + data.tracks.length);
+                
+                addLog("Найдено: " + (data.tracks ? data.tracks.length : 0));
                 
                 let html = '';
-                data.tracks.forEach(t => {
-                    html += `<div class="track-card" onclick="playTrack('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
-                        <b>${t.title}</b><br><small style="color:#888">${t.artist}</small>
-                    </div>`;
-                });
+                if(data.tracks && data.tracks.length > 0) {
+                    data.tracks.forEach(t => {
+                        html += `
+                        <div class="track-card" onclick="play('${t.id}', '${encodeURIComponent(t.yt_url)}', '${t.title.replace(/'/g, "")}')">
+                            <div class="track-info">
+                                <div class="track-title">${t.title}</div>
+                                <div class="track-artist">${t.artist}</div>
+                            </div>
+                            <div style="color: var(--accent)">▶</div>
+                        </div>`;
+                    });
+                } else {
+                    html = "<p style='text-align:center; color:#888'>Ничего не найдено</p>";
+                }
                 document.getElementById('results').innerHTML = html;
             } catch (e) {
-                writeLog("❌ Ошибка: " + e.message);
+                addLog("ОШИБКА: " + e.message);
+                document.getElementById('results').innerHTML = "<p style='text-align:center; color:red'>Ошибка связи с сервером</p>";
             }
         }
 
-        function playTrack(id, url, title) {
-            writeLog("🎵 Запуск: " + title);
-            document.getElementById('player').style.display = 'block';
-            document.getElementById('track-title').innerText = title;
+        function play(id, url, title) {
+            addLog("Стриминг: " + title);
+            const playerBar = document.getElementById('player-bar');
             const audio = document.getElementById('audio');
+            const nowPlaying = document.getElementById('now-playing');
+
+            playerBar.style.display = 'block';
+            nowPlaying.innerText = "🎶 " + title;
+            
+            // Формируем ссылку на стрим
             audio.src = `${API}/stream/${id}?url=${url}`;
-            audio.play().catch(err => writeLog("🚫 Ошибка плеера: " + err.message));
+            
+            audio.onerror = () => addLog("Ошибка загрузки аудио");
+            audio.onplaying = () => addLog("Воспроизведение...");
+            
+            audio.play().catch(e => addLog("Блокировка автоплея"));
         }
     </script>
 </body>
