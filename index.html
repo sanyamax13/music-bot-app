@@ -46,13 +46,17 @@
         #mini-player { position: fixed; bottom: 85px; left: 10px; right: 10px; background: var(--surface-light); border-radius: 15px; padding: 10px; display: none; align-items: center; z-index: 99; cursor: pointer; border: 1px solid rgba(255,51,102,0.2); }
         .mp-play-btn { font-size: 24px; color: var(--accent); padding: 0 10px; }
 
-        #full-player { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; transition: top 0.4s cubic-bezier(0.25, 0.8, 0.25, 1); display: flex; flex-direction: column; padding: 30px; }
+        #full-player { position: fixed; top: 100%; left: 0; width: 100%; height: 100%; background: var(--bg); z-index: 200; display: flex; flex-direction: column; padding: 30px; 
+            transition: top 0.4s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.3s ease; 
+        }
         #full-player.open { top: 0; }
-        .close-player { position: absolute; top: 20px; left: 20px; font-size: 24px; color: var(--text-muted); padding: 10px;}
+        .close-player { position: absolute; top: 20px; left: 20px; font-size: 24px; color: var(--text-muted); padding: 10px; z-index: 201; cursor: pointer;}
+        .close-player-line { width: 40px; height: 5px; background: var(--surface-light); border-radius: 5px; margin: 0 auto 10px auto; }
         
-        .art-container { width: 100%; aspect-ratio: 1/1; margin: 50px 0 30px 0; border-radius: 20px; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);}
+        .art-container { width: 100%; aspect-ratio: 1/1; margin: 30px 0 30px 0; border-radius: 20px; position: relative; overflow: hidden; box-shadow: 0 10px 30px rgba(0,0,0,0.5);}
         #fp-cover-bg { position: absolute; width: 100%; height: 100%; object-fit: cover; filter: blur(20px) brightness(0.6); transform: scale(1.2); z-index: 1; }
         #fp-cover { position: absolute; width: 100%; height: 100%; object-fit: contain; z-index: 2; }
+        #loading-overlay { display: none; position: absolute; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.7); color:var(--accent); justify-content:center; align-items:center; font-weight:bold; z-index: 10; text-align:center; padding: 20px;}
         
         #fp-title { font-size: 24px; font-weight: 800; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 5px;}
         #fp-artist { font-size: 16px; color: var(--text-muted); text-align: center; margin-bottom: 30px; }
@@ -103,7 +107,7 @@
         </div>
     </div>
 
-    <div id="mini-player" onclick="togglePlayer(event)">
+    <div id="mini-player" onclick="openFullPlayer()">
         <div class="track-thumb-container">
             <img id="mp-thumb-bg" class="track-thumb-bg" src="">
             <img id="mp-thumb" class="track-thumb" src="">
@@ -116,8 +120,10 @@
     </div>
 
     <div id="full-player">
-        <div class="close-player" onclick="togglePlayer(event)">🡇</div>
+        <div class="close-player-line"></div>
+        <div class="close-player" onclick="closeFullPlayer()">🡇</div>
         <div class="art-container">
+            <div id="loading-overlay">Загрузка...</div>
             <img id="fp-cover-bg" src="">
             <img id="fp-cover" src="">
         </div>
@@ -132,7 +138,7 @@
         
         <div class="controls">
             <button class="ctrl-btn" onclick="playPrev()">⏮</button>
-            <button id="fp-play-btn" class="ctrl-btn play-btn" onclick="togglePlay()">⏸</button>
+            <button id="fp-play-btn" class="ctrl-btn play-btn" onclick="togglePlay(event)">⏸</button>
             <button class="ctrl-btn" onclick="playNext(true)">⏭</button>
         </div>
         
@@ -160,7 +166,6 @@
         const API = "https://surround-subpar-distort.ngrok-free.dev";
         const headers = {"ngrok-skip-browser-warning":"1"};
 
-        // Состояние
         let activeAudio = document.getElementById('audioA');
         let nextAudio = document.getElementById('audioB');
         let currentQueue = [], currentIndex = -1, currentContext = '';
@@ -172,6 +177,41 @@
             lc.innerHTML = `[${new Date().toLocaleTimeString()}] ${msg}<br>` + lc.innerHTML;
         }
 
+        // --- УПРАВЛЕНИЕ ПОЛНОЭКРАННЫМ ПЛЕЕРОМ И СВАЙП ---
+        const fp = document.getElementById('full-player');
+        let startY = 0;
+        let currentY = 0;
+
+        function openFullPlayer() { 
+            fp.classList.add('open'); 
+            fp.style.transform = '';
+        }
+        function closeFullPlayer() { 
+            fp.classList.remove('open'); 
+        }
+
+        fp.addEventListener('touchstart', (e) => {
+            startY = e.touches[0].clientY;
+            fp.style.transition = 'none'; // Отключаем плавность на время пальца
+        }, {passive: true});
+
+        fp.addEventListener('touchmove', (e) => {
+            currentY = e.touches[0].clientY;
+            const diff = currentY - startY;
+            if (diff > 0) fp.style.transform = `translateY(${diff}px)`; // Двигаем вниз
+        }, {passive: true});
+
+        fp.addEventListener('touchend', (e) => {
+            fp.style.transition = 'transform 0.3s ease, top 0.4s ease'; // Возвращаем плавность
+            const diff = currentY - startY;
+            if (diff > 120) { // Если свайпнули больше 120px - закрываем
+                closeFullPlayer();
+                setTimeout(() => fp.style.transform = '', 400);
+            } else {
+                fp.style.transform = 'translateY(0)'; // Пружиним обратно
+            }
+        });
+
         // --- ИЗБРАННОЕ ---
         function toggleFav(track, e) {
             if(e) e.stopPropagation();
@@ -181,30 +221,20 @@
             localStorage.setItem('vds_favs', JSON.stringify(favorites));
             renderFavs();
             if(currentIndex > -1 && currentQueue[currentIndex].id === track.id) updateFavUI(track.id);
-            // Обновляем иконки в текущем видимом списке
             document.querySelectorAll(`.fav-icon-${track.id}`).forEach(el => {
                 el.innerText = idx > -1 ? '🤍' : '❤️';
                 el.classList.toggle('active', idx === -1);
             });
         }
-
         function isFav(id) { return favorites.some(f => f.id === id); }
-        
         function updateFavUI(id) {
             const btn = document.getElementById('fp-fav-btn');
             const fav = isFav(id);
             btn.innerText = fav ? '❤️' : '🤍';
             btn.classList.toggle('active', fav);
         }
-
-        function toggleFavCurrent() {
-            if(currentIndex > -1) toggleFav(currentQueue[currentIndex]);
-        }
-
-        function renderFavs() {
-            window.favQueue = favorites;
-            document.getElementById('fav-results').innerHTML = favorites.map((t, i) => buildTrackHTML(t, i, 'fav')).join('');
-        }
+        function toggleFavCurrent() { if(currentIndex > -1) toggleFav(currentQueue[currentIndex]); }
+        function renderFavs() { window.favQueue = favorites; document.getElementById('fav-results').innerHTML = favorites.map((t, i) => buildTrackHTML(t, i, 'fav')).join(''); }
 
         // --- РЕНДЕР ---
         async function getCover(track) {
@@ -212,7 +242,7 @@
             try {
                 const r = await fetch(`${API}/cover?q=${encodeURIComponent(track.search_query)}`, {headers});
                 const d = await r.json();
-                track.itunes_cover = d.url || track.thumb; // Кэшируем в объекте
+                track.itunes_cover = d.url || track.thumb;
                 return track.itunes_cover;
             } catch(e) { return track.thumb; }
         }
@@ -220,9 +250,7 @@
         function buildTrackHTML(t, i, ctx) {
             const favClass = isFav(t.id) ? 'active' : '';
             const favIcon = isFav(t.id) ? '❤️' : '🤍';
-            // Используем JSON для безопасной передачи объекта
             const trackStr = JSON.stringify(t).replace(/'/g, "&#39;").replace(/"/g, "&quot;");
-            
             return `<div class="track-item" onclick="setQueue(${i}, '${ctx}')">
                 <div class="track-thumb-container">
                     <img class="track-thumb-bg" src="${t.thumb}">
@@ -257,7 +285,6 @@
                 const d = await r.json();
                 window.searchQueue = d.tracks;
                 document.getElementById('search-results').innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'search')).join('');
-                // Ленивая подгрузка обложек iTunes
                 d.tracks.forEach(async t => {
                     const img = document.getElementById(`list-thumb-${t.id}`);
                     if(img) img.src = await getCover(t);
@@ -276,13 +303,10 @@
                     window.randomQueue = d.tracks;
                     res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'random')).join('');
                 } else {
-                    // Бесконечный скролл: добавляем в конец
                     const startIdx = window.randomQueue.length;
                     window.randomQueue = window.randomQueue.concat(d.tracks);
                     res.innerHTML += d.tracks.map((t, i) => buildTrackHTML(t, startIdx + i, 'random')).join('');
-                    log("Добавлено 30 треков в случайные");
                 }
-                // Грузим обложки
                 d.tracks.forEach(async t => {
                     const img = document.getElementById(`list-thumb-${t.id}`);
                     if(img) img.src = await getCover(t);
@@ -291,31 +315,18 @@
         }
 
         const genres = ["Поп-музыка", "Хип-хоп / Рэп", "Электронная (EDM)", "Афробит", "Инди-рок", "Рок / Метал"];
-        function renderGenres() {
-            document.getElementById('genre-grid').innerHTML = genres.map(g => `<div class="genre-card" onclick="loadGenre('${g}')">${g}</div>`).join('');
-        }
-        function showGenreGrid() {
-            document.getElementById('genre-grid').style.display = 'grid';
-            document.getElementById('genre-results').style.display = 'none';
-            document.getElementById('genre-back').style.display = 'none';
-            document.getElementById('genre-title').innerText = "Жанры";
-        }
+        function renderGenres() { document.getElementById('genre-grid').innerHTML = genres.map(g => `<div class="genre-card" onclick="loadGenre('${g}')">${g}</div>`).join(''); }
+        function showGenreGrid() { document.getElementById('genre-grid').style.display = 'grid'; document.getElementById('genre-results').style.display = 'none'; document.getElementById('genre-back').style.display = 'none'; document.getElementById('genre-title').innerText = "Жанры"; }
+        
         async function loadGenre(g) {
-            showGenreGrid(); // сброс
-            document.getElementById('genre-grid').style.display = 'none';
-            document.getElementById('genre-results').style.display = 'flex';
-            document.getElementById('genre-back').style.display = 'block';
-            document.getElementById('genre-title').innerText = g;
+            showGenreGrid(); document.getElementById('genre-grid').style.display = 'none'; document.getElementById('genre-results').style.display = 'flex'; document.getElementById('genre-back').style.display = 'block'; document.getElementById('genre-title').innerText = g;
             document.getElementById('genre-results').innerHTML = "⏳ Собираем плейлист...";
             try {
                 const r = await fetch(`${API}/genre?q=${encodeURIComponent(g)}`, {headers});
                 const d = await r.json();
                 window.genreQueue = d.tracks;
                 document.getElementById('genre-results').innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('');
-                d.tracks.forEach(async t => {
-                    const img = document.getElementById(`list-thumb-${t.id}`);
-                    if(img) img.src = await getCover(t);
-                });
+                d.tracks.forEach(async t => { const img = document.getElementById(`list-thumb-${t.id}`); if(img) img.src = await getCover(t); });
             } catch(e){}
         }
 
@@ -326,12 +337,7 @@
             if(ctx === 'random') currentQueue = window.randomQueue;
             if(ctx === 'genre') currentQueue = window.genreQueue;
             if(ctx === 'fav') currentQueue = window.favQueue;
-            
-            // Если мы нажали на трек, сбрасываем предзагрузку
-            nextAudio.removeAttribute('src');
-            nextAudio.load();
-            isPreloading = false;
-            
+            nextAudio.removeAttribute('src'); nextAudio.load(); isPreloading = false;
             playTrack(index);
         }
 
@@ -341,64 +347,62 @@
             const track = currentQueue[index];
             
             updateUI(track);
-            log("Запуск: " + track.title);
-
             activeAudio.pause();
             
-            // Загрузка через Blob для обхода защиты iOS
+            const overlay = document.getElementById('loading-overlay');
+            overlay.innerText = "⏳ Загрузка...";
+            overlay.style.display = 'flex';
+            
             try {
                 const r = await fetch(`${API}/stream/${track.id}?url=${encodeURIComponent(track.yt_url)}`, {headers});
+                
+                // 404 АВТО-СКИП ЛОГИКА
+                if(r.status === 404) {
+                    overlay.innerText = "❌ Трек недоступен. Переключаю...";
+                    log("Трек недоступен, пропускаем: " + track.title);
+                    setTimeout(() => playNext(false), 2000);
+                    return;
+                }
+                if (!r.ok) throw new Error("Server Error");
+
                 const blob = await r.blob();
-                const objUrl = URL.createObjectURL(blob);
-                
-                activeAudio.src = objUrl;
+                activeAudio.src = URL.createObjectURL(blob);
                 activeAudio.load();
-                activeAudio.play().then(() => updatePlayState(true)).catch(e => log("Safari блок автоплея"));
+                overlay.style.display = 'none';
                 
-            } catch(e) { log("Ошибка стрима"); }
-            
-            // Проверка на бесконечный скролл в Случайных
-            if(currentContext === 'random' && index >= currentQueue.length - 3) {
-                loadRandom(false);
+                activeAudio.play().then(() => updatePlayState(true)).catch(e => log("Safari блок автоплея"));
+            } catch(e) { 
+                overlay.innerText = "Ошибка загрузки";
+                log("Ошибка стрима: " + e.message); 
             }
+            
+            if(currentContext === 'random' && index >= currentQueue.length - 3) loadRandom(false);
         }
 
-        // PRELOAD СЛЕДУЮЩЕГО ТРЕКА (ДВОЙНОЙ ПЛЕЕР)
         async function preloadNext() {
             if(isPreloading || currentIndex + 1 >= currentQueue.length) return;
             isPreloading = true;
             const nextTrack = currentQueue[currentIndex + 1];
-            log("Фоновая загрузка: " + nextTrack.title);
-            
             try {
                 const r = await fetch(`${API}/stream/${nextTrack.id}?url=${encodeURIComponent(nextTrack.yt_url)}`, {headers});
+                if(r.status === 404) return; // Если не найдено, пропустим preload, разберемся при playNext
                 const blob = await r.blob();
                 nextAudio.src = URL.createObjectURL(blob);
                 nextAudio.load();
-                log("Готово к бесшовному переходу");
             } catch(e) { isPreloading = false; }
         }
 
         function playNext(manual = false) {
             if(currentIndex + 1 >= currentQueue.length) return;
-            
             if(!manual && isPreloading && nextAudio.src) {
-                // БЕСШОВНЫЙ ПЕРЕХОД
                 activeAudio.pause();
-                // Меняем плееры местами
-                const temp = activeAudio;
-                activeAudio = nextAudio;
-                nextAudio = temp;
-                
+                const temp = activeAudio; activeAudio = nextAudio; nextAudio = temp;
                 currentIndex++;
                 updateUI(currentQueue[currentIndex]);
-                
                 activeAudio.play();
                 isPreloading = false;
-                nextAudio.removeAttribute('src'); // очищаем старый
-                
+                nextAudio.removeAttribute('src');
             } else {
-                // Обычный переход
                 playTrack(currentIndex + 1);
             }
         }
@@ -407,15 +411,11 @@
 
         activeAudio.addEventListener('timeupdate', () => {
             updateProgress(activeAudio);
-            // Начинаем предзагрузку за 30 сек до конца
-            if(activeAudio.duration && (activeAudio.duration - activeAudio.currentTime) < 30 && !isPreloading) {
-                preloadNext();
-            }
+            if(activeAudio.duration && (activeAudio.duration - activeAudio.currentTime) < 30 && !isPreloading) preloadNext();
         });
         nextAudio.addEventListener('timeupdate', () => { updateProgress(nextAudio); });
-
         activeAudio.onended = () => playNext(false);
-        nextAudio.onended = () => playNext(false); // На случай если они поменялись ролями
+        nextAudio.onended = () => playNext(false);
 
         // --- УПРАВЛЕНИЕ UI ---
         async function updateUI(track) {
@@ -424,15 +424,12 @@
             document.getElementById('mp-artist').innerText = track.artist || '';
             document.getElementById('fp-title').innerText = track.title;
             document.getElementById('fp-artist').innerText = track.artist || '';
-            
             updateFavUI(track.id);
             
-            // Базовая обложка
             const setImg = (id, src) => document.getElementById(id).src = src;
             setImg('mp-thumb-bg', track.thumb); setImg('mp-thumb', track.thumb);
             setImg('fp-cover-bg', track.thumb); setImg('fp-cover', track.thumb);
 
-            // Подгрузка HQ iTunes
             const cover = await getCover(track);
             setImg('mp-thumb', cover); setImg('fp-cover', cover);
         }
@@ -448,18 +445,11 @@
             document.getElementById('fp-play-btn').innerText = isPlaying ? '⏸' : '▶';
         }
 
-        function togglePlayer(e) {
-            if(e.target.id === 'mp-play-btn') return;
-            document.getElementById('full-player').classList.toggle('open');
-        }
-
-        // Прогресс бар
         const progBar = document.getElementById('progress');
         const tCur = document.getElementById('time-cur');
         const tTot = document.getElementById('time-tot');
-
         function updateProgress(audioEl) {
-            if(audioEl !== activeAudio) return; // Обновляем только для активного
+            if(audioEl !== activeAudio) return;
             if(audioEl.duration) {
                 progBar.max = audioEl.duration;
                 progBar.value = audioEl.currentTime;
