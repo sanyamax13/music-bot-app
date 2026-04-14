@@ -28,6 +28,7 @@
         input[type=range] { width: 100%; -webkit-appearance: none; background: #333; height: 4px; border-radius: 2px; outline: none; margin: 25px 0;}
         input[type=range]::-webkit-slider-thumb { -webkit-appearance: none; width: 16px; height: 16px; background: var(--accent); border-radius: 50%; box-shadow: 0 0 10px rgba(255,51,102,0.5); }
         #mini-player { position: fixed; bottom: 95px; left: 15px; right: 15px; background: #252530; padding: 8px 15px; border-radius: 20px; display: none; align-items: center; z-index: 80; box-shadow: 0 12px 30px rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.1); }
+        #logs-container { background: #111; padding: 15px; border-radius: 10px; font-family: monospace; font-size: 11px; color: #0f0; white-space: pre-wrap; height: 400px; overflow-y: auto; border: 1px solid #333;}
     </style>
 </head>
 <body>
@@ -46,6 +47,14 @@
         </div>
         <div id="tab-collection" class="tab-view"><h1>Коллекция ❤️</h1><div id="collection-results"></div></div>
         <div id="tab-history" class="tab-view"><h1>История 🕒</h1><div id="history-results"></div></div>
+        
+        <div id="tab-logs" class="tab-view">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom: 15px;">
+                <h1 style="margin:0;">Логи 📜</h1>
+                <button onclick="fetchServerLogs()" style="background:var(--accent); border:none; color:white; padding:8px 15px; border-radius:8px;">Обновить</button>
+            </div>
+            <div id="logs-container">Нажмите обновить, чтобы загрузить логи с сервера...</div>
+        </div>
     </div>
 
     <div class="fab" onclick="openSearch()">🔍</div>
@@ -83,7 +92,7 @@
         <div class="nav-item active" onclick="switchTab('for-you', this)"><span class="nav-icon">✨</span>Микс</div>
         <div class="nav-item" onclick="switchTab('genres', this)"><span class="nav-icon">🎸</span>Жанры</div>
         <div class="nav-item" onclick="switchTab('collection', this)"><span class="nav-icon">❤️</span>Избранное</div>
-        <div class="nav-item" onclick="switchTab('history', this)"><span class="nav-icon">🕒</span>История</div>
+        <div class="nav-item" onclick="switchTab('logs', this)"><span class="nav-icon">📜</span>Логи</div>
     </div>
 
     <script>
@@ -104,6 +113,24 @@
             if(tab === 'collection') renderList(collection, 'collection-results', 'collection');
             if(tab === 'history') renderList(history, 'history-results', 'history');
             if(tab === 'for-you' && !document.getElementById('for-you-results').innerHTML) loadSmartRandom();
+            if(tab === 'logs') fetchServerLogs();
+        }
+
+        async function fetchServerLogs() {
+            const lc = document.getElementById('logs-container');
+            lc.innerText = "Загрузка логов...";
+            try {
+                const r = await fetch(`${API}/logs`);
+                const d = await r.json();
+                if(d.logs && d.logs.length > 0) {
+                    lc.innerText = d.logs.join('\n');
+                    lc.scrollTop = lc.scrollHeight; // Скролл вниз
+                } else {
+                    lc.innerText = "Сервер работает, но логов пока нет.";
+                }
+            } catch(e) {
+                lc.innerText = "❌ Ошибка загрузки логов. Проверьте соединение с сервером ngrok.";
+            }
         }
 
         async function loadSmartRandom() {
@@ -114,7 +141,7 @@
                 const r = await fetch(`${API}/smart_random?seeds=${encodeURIComponent(seeds)}`);
                 const d = await r.json(); window.foryouQueue = d.tracks;
                 res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'for-you')).join('');
-            } catch(e) { res.innerHTML = "Ошибка связи с ИИ."; }
+            } catch(e) { res.innerHTML = "❌ Ошибка связи с ИИ. Откройте вкладку Логи."; }
         }
 
         const genres = ["Pop", "Hip-Hop", "Techno", "House", "Rock", "Phonk", "Lo-Fi", "Synthwave", "Indie", "Jazz"];
@@ -130,9 +157,23 @@
                 const r = await fetch(`${API}/genre?q=${g}`);
                 const d = await r.json(); window.genreQueue = d.tracks;
                 list.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('');
-            } catch(e) {}
+            } catch(e) { list.innerHTML = "❌ Ошибка загрузки жанра. Откройте вкладку Логи."; }
         }
         function showGenreGrid() { document.getElementById('genre-grid').style.display = 'grid'; document.getElementById('genre-results').style.display = 'none'; }
+
+        function openSearch() { document.getElementById('search-overlay').classList.add('open'); document.getElementById('search-input').focus(); }
+        function closeSearch() { document.getElementById('search-overlay').classList.remove('open'); }
+        async function doSearch() {
+            const q = document.getElementById('search-input').value;
+            if(!q) return;
+            const res = document.getElementById('search-results-list');
+            res.innerHTML = "<p style='text-align:center; margin-top:50px;'>⏳ Ищем...</p>";
+            try {
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
+                const d = await r.json(); window.searchQueue = d.tracks;
+                res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'search')).join('');
+            } catch(e) { res.innerHTML = "❌ Ошибка поиска. Откройте вкладку Логи."; }
+        }
 
         function buildTrackHTML(t, i, ctx) {
             const isFav = collection.some(c => c.id === t.id);
@@ -152,6 +193,7 @@
             if(ctx === 'genre') currentQueue = window.genreQueue;
             if(ctx === 'collection') currentQueue = collection;
             if(ctx === 'history') currentQueue = history;
+            if(ctx === 'search') { currentQueue = window.searchQueue; closeSearch(); }
             playTrack(i);
         }
 
@@ -174,12 +216,19 @@
             activeAudio.pause();
             try {
                 const r = await fetch(`${API}/stream/${t.id}?url=${encodeURIComponent(t.yt_url)}`);
-                if(r.status === 404) { playNext(false); return; }
+                if(r.status !== 200 && r.status !== 206) { 
+                    console.error("Ошибка стрима:", r.status);
+                    playNext(false); 
+                    return; 
+                }
                 const blob = await r.blob();
                 activeAudio.src = URL.createObjectURL(blob);
-                activeAudio.play();
-                updatePlayUI(true);
-            } catch(e) {}
+                activeAudio.play().then(() => updatePlayUI(true)).catch(e => {
+                    console.error("Блокировка автоплея:", e);
+                });
+            } catch(e) {
+                console.error("Ошибка сети при скачивании аудио:", e);
+            }
         }
 
         function updateHistory(t) {
@@ -194,7 +243,7 @@
             localStorage.setItem('vds_collection', JSON.stringify(collection));
             if(currentIndex > -1 && currentQueue[currentIndex].id === t.id) 
                 document.getElementById('fp-fav-btn').innerText = idx > -1 ? '🤍' : '❤️';
-            // Перерисовать текущую вкладку если нужно
+            if(document.getElementById('tab-collection').classList.contains('active')) renderList(collection, 'collection-results', 'collection');
         }
 
         function setupMediaSession(t) {
@@ -229,6 +278,18 @@
         function openFullPlayer() { document.getElementById('full-player').classList.add('open'); }
         function closeFullPlayer() { document.getElementById('full-player').classList.remove('open'); }
         function renderList(list, id, ctx) { document.getElementById(id).innerHTML = list.map((t, i) => buildTrackHTML(t, i, ctx)).join(''); }
+
+        // Добавляем верстку окна поиска (которую ты мог пропустить при прошлом копировании)
+        document.body.insertAdjacentHTML('beforeend', `
+        <div id="search-overlay" style="position:fixed; top:100%; left:0; width:100%; height:100%; background:rgba(15,15,19,0.95); backdrop-filter:blur(10px); z-index:3000; transition:0.3s; padding:20px; display:flex; flex-direction:column;">
+            <div style="display:flex; margin-bottom:15px; align-items:center;">
+                <input id="search-input" style="flex:1; padding:15px; border-radius:12px; border:none; background:var(--surface); color:white; font-size:16px; outline:none;" placeholder="Трек, артист, альбом..." onkeydown="if(event.key==='Enter') doSearch()">
+                <div onclick="closeSearch()" style="margin-left:15px; font-size:28px; color:#888; cursor:pointer;">✕</div>
+            </div>
+            <div id="search-results-list" style="overflow-y:auto; flex:1; padding-bottom:30px;">
+                <p style="text-align:center; color:#555; margin-top:50px;">Введите запрос для поиска</p>
+            </div>
+        </div>`);
 
         renderGenres(); switchTab('for-you', document.querySelector('.nav-item'));
     </script>
