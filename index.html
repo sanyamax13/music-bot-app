@@ -95,18 +95,25 @@
         <div class="nav-item" onclick="switchTab('logs', this)"><span class="nav-icon">📜</span>Логи</div>
     </div>
 
+    <div id="search-overlay" style="position:fixed; top:100%; left:0; width:100%; height:100%; background:rgba(15,15,19,0.95); backdrop-filter:blur(10px); z-index:3000; transition:0.3s; padding:20px; display:flex; flex-direction:column;">
+        <div style="display:flex; margin-bottom:15px; align-items:center;">
+            <input id="search-input" style="flex:1; padding:15px; border-radius:12px; border:none; background:var(--surface); color:white; font-size:16px; outline:none;" placeholder="Трек, артист, альбом..." onkeydown="if(event.key==='Enter') doSearch()">
+            <div onclick="closeSearch()" style="margin-left:15px; font-size:28px; color:#888; cursor:pointer;">✕</div>
+        </div>
+        <div id="search-results-list" style="overflow-y:auto; flex:1; padding-bottom:30px;">
+            <p style="text-align:center; color:#555; margin-top:50px;">Введите запрос для поиска</p>
+        </div>
+    </div>
+
     <script>
         const API = "https://surround-subpar-distort.ngrok-free.dev";
         const tg = window.Telegram.WebApp; tg.expand(); tg.setHeaderColor('#0f0f13');
-        
-        // Магический ключ для ngrok, чтобы он не блокировал API-запросы
-        const ngrokHeaders = { "ngrok-skip-browser-warning": "1" };
         
         let audioA = document.getElementById('audioA'), audioB = document.getElementById('audioB');
         let activeAudio = audioA, nextAudio = audioB;
         let collection = JSON.parse(localStorage.getItem('vds_collection') || '[]');
         let history = JSON.parse(localStorage.getItem('vds_history') || '[]');
-        let currentQueue = [], currentIndex = -1, isPreloading = false;
+        let currentQueue = [], currentIndex = -1;
 
         function switchTab(tab, el) {
             document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
@@ -123,11 +130,11 @@
             const lc = document.getElementById('logs-container');
             lc.innerText = "Загрузка логов...";
             try {
-                const r = await fetch(`${API}/logs`, { headers: ngrokHeaders });
+                const r = await fetch(`${API}/logs`);
                 const d = await r.json();
                 if(d.logs && d.logs.length > 0) {
                     lc.innerText = d.logs.join('\n');
-                    lc.scrollTop = lc.scrollHeight; // Скролл вниз
+                    lc.scrollTop = lc.scrollHeight;
                 } else {
                     lc.innerText = "Сервер работает, но логов пока нет.";
                 }
@@ -141,7 +148,7 @@
             res.innerHTML = "<p style='color:#555; text-align:center;'>🤖 ИИ подбирает музыку...</p>";
             const seeds = collection.length ? collection.slice(-5).map(t => t.title).join('||') : "";
             try {
-                const r = await fetch(`${API}/smart_random?seeds=${encodeURIComponent(seeds)}`, { headers: ngrokHeaders });
+                const r = await fetch(`${API}/smart_random?seeds=${encodeURIComponent(seeds)}`);
                 const d = await r.json(); window.foryouQueue = d.tracks;
                 res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'for-you')).join('');
             } catch(e) { res.innerHTML = "❌ Ошибка связи с ИИ. Откройте вкладку Логи."; }
@@ -151,13 +158,14 @@
         function renderGenres() {
             document.getElementById('genre-grid').innerHTML = genres.map(g => `<div class="genre-card" onclick="loadGenre('${g}')">${g}</div>`).join('');
         }
+        
         async function loadGenre(g) {
             document.getElementById('genre-grid').style.display = 'none';
             document.getElementById('genre-results').style.display = 'block';
             const list = document.getElementById('genre-list');
             list.innerHTML = "<p style='text-align:center;'>🔝 Загрузка топ-плейлиста...</p>";
             try {
-                const r = await fetch(`${API}/genre?q=${g}`, { headers: ngrokHeaders });
+                const r = await fetch(`${API}/genre?q=${g}`);
                 const d = await r.json(); window.genreQueue = d.tracks;
                 list.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('');
             } catch(e) { list.innerHTML = "❌ Ошибка загрузки жанра. Откройте вкладку Логи."; }
@@ -172,7 +180,7 @@
             const res = document.getElementById('search-results-list');
             res.innerHTML = "<p style='text-align:center; margin-top:50px;'>⏳ Ищем...</p>";
             try {
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { headers: ngrokHeaders });
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
                 const d = await r.json(); window.searchQueue = d.tracks;
                 res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'search')).join('');
             } catch(e) { res.innerHTML = "❌ Ошибка поиска. Откройте вкладку Логи."; }
@@ -202,7 +210,8 @@
 
         async function playTrack(i) {
             if(i < 0 || i >= currentQueue.length) return;
-            currentIndex = i; const t = currentQueue[i];
+            currentIndex = i; 
+            const t = currentQueue[i];
             
             document.getElementById('mini-player').style.display = 'flex';
             document.getElementById('mp-title').innerText = t.title;
@@ -216,21 +225,40 @@
             setupMediaSession(t);
             updateHistory(t);
 
-            activeAudio.pause();
-            try {
-                const r = await fetch(`${API}/stream/${t.id}?url=${encodeURIComponent(t.yt_url)}`, { headers: ngrokHeaders });
-                if(r.status !== 200 && r.status !== 206) { 
-                    console.error("Ошибка стрима:", r.status);
-                    playNext(false); 
-                    return; 
+            // Паттерн "Двойной буфер"
+            let prevAudio = activeAudio;
+            activeAudio = (activeAudio === audioA) ? audioB : audioA;
+            nextAudio = (nextAudio === audioB) ? audioA : audioB;
+
+            prevAudio.pause();
+            prevAudio.removeAttribute('src');
+            prevAudio.load(); 
+
+            const streamUrl = `${API}/stream/${t.id}?url=${encodeURIComponent(t.yt_url)}`;
+            activeAudio.src = streamUrl;
+
+            activeAudio.ontimeupdate = () => {
+                if(activeAudio.duration) {
+                    document.getElementById('progress').value = (activeAudio.currentTime / activeAudio.duration) * 100;
                 }
-                const blob = await r.blob();
-                activeAudio.src = URL.createObjectURL(blob);
-                activeAudio.play().then(() => updatePlayUI(true)).catch(e => {
-                    console.error("Блокировка автоплея:", e);
-                });
+            };
+            activeAudio.onended = () => playNext(false);
+
+            try {
+                await activeAudio.play();
+                updatePlayUI(true);
+                preloadNextTrack();
             } catch(e) {
-                console.error("Ошибка сети при скачивании аудио:", e);
+                console.error("Блокировка автоплея ОС:", e);
+                updatePlayUI(false);
+            }
+        }
+
+        function preloadNextTrack() {
+            if (currentIndex + 1 < currentQueue.length) {
+                const nextTrack = currentQueue[currentIndex + 1];
+                nextAudio.src = `${API}/stream/${nextTrack.id}?url=${encodeURIComponent(nextTrack.yt_url)}`;
+                nextAudio.preload = "auto";
             }
         }
 
@@ -247,6 +275,10 @@
             if(currentIndex > -1 && currentQueue[currentIndex].id === t.id) 
                 document.getElementById('fp-fav-btn').innerText = idx > -1 ? '🤍' : '❤️';
             if(document.getElementById('tab-collection').classList.contains('active')) renderList(collection, 'collection-results', 'collection');
+        }
+
+        function toggleCollectionCurrent() {
+            if (currentIndex > -1) toggleCollection(currentQueue[currentIndex]);
         }
 
         function setupMediaSession(t) {
@@ -273,26 +305,10 @@
             document.getElementById('fp-play-btn').innerText = p ? '⏸' : '▶';
         }
         function seekAudio(v) { activeAudio.currentTime = (v / 100) * activeAudio.duration; }
-        activeAudio.ontimeupdate = () => {
-            if(activeAudio.duration) document.getElementById('progress').value = (activeAudio.currentTime / activeAudio.duration) * 100;
-        };
-        activeAudio.onended = () => playNext(false);
 
         function openFullPlayer() { document.getElementById('full-player').classList.add('open'); }
         function closeFullPlayer() { document.getElementById('full-player').classList.remove('open'); }
         function renderList(list, id, ctx) { document.getElementById(id).innerHTML = list.map((t, i) => buildTrackHTML(t, i, ctx)).join(''); }
-
-        // Верстка окна поиска
-        document.body.insertAdjacentHTML('beforeend', `
-        <div id="search-overlay" style="position:fixed; top:100%; left:0; width:100%; height:100%; background:rgba(15,15,19,0.95); backdrop-filter:blur(10px); z-index:3000; transition:0.3s; padding:20px; display:flex; flex-direction:column;">
-            <div style="display:flex; margin-bottom:15px; align-items:center;">
-                <input id="search-input" style="flex:1; padding:15px; border-radius:12px; border:none; background:var(--surface); color:white; font-size:16px; outline:none;" placeholder="Трек, артист, альбом..." onkeydown="if(event.key==='Enter') doSearch()">
-                <div onclick="closeSearch()" style="margin-left:15px; font-size:28px; color:#888; cursor:pointer;">✕</div>
-            </div>
-            <div id="search-results-list" style="overflow-y:auto; flex:1; padding-bottom:30px;">
-                <p style="text-align:center; color:#555; margin-top:50px;">Введите запрос для поиска</p>
-            </div>
-        </div>`);
 
         renderGenres(); switchTab('for-you', document.querySelector('.nav-item'));
     </script>
