@@ -99,6 +99,9 @@
         const API = "https://surround-subpar-distort.ngrok-free.dev";
         const tg = window.Telegram.WebApp; tg.expand(); tg.setHeaderColor('#0f0f13');
         
+        // Магический ключ для ngrok, чтобы он не блокировал API-запросы
+        const ngrokHeaders = { "ngrok-skip-browser-warning": "1" };
+        
         let audioA = document.getElementById('audioA'), audioB = document.getElementById('audioB');
         let activeAudio = audioA, nextAudio = audioB;
         let collection = JSON.parse(localStorage.getItem('vds_collection') || '[]');
@@ -120,7 +123,7 @@
             const lc = document.getElementById('logs-container');
             lc.innerText = "Загрузка логов...";
             try {
-                const r = await fetch(`${API}/logs`);
+                const r = await fetch(`${API}/logs`, { headers: ngrokHeaders });
                 const d = await r.json();
                 if(d.logs && d.logs.length > 0) {
                     lc.innerText = d.logs.join('\n');
@@ -138,7 +141,7 @@
             res.innerHTML = "<p style='color:#555; text-align:center;'>🤖 ИИ подбирает музыку...</p>";
             const seeds = collection.length ? collection.slice(-5).map(t => t.title).join('||') : "";
             try {
-                const r = await fetch(`${API}/smart_random?seeds=${encodeURIComponent(seeds)}`);
+                const r = await fetch(`${API}/smart_random?seeds=${encodeURIComponent(seeds)}`, { headers: ngrokHeaders });
                 const d = await r.json(); window.foryouQueue = d.tracks;
                 res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'for-you')).join('');
             } catch(e) { res.innerHTML = "❌ Ошибка связи с ИИ. Откройте вкладку Логи."; }
@@ -154,7 +157,7 @@
             const list = document.getElementById('genre-list');
             list.innerHTML = "<p style='text-align:center;'>🔝 Загрузка топ-плейлиста...</p>";
             try {
-                const r = await fetch(`${API}/genre?q=${g}`);
+                const r = await fetch(`${API}/genre?q=${g}`, { headers: ngrokHeaders });
                 const d = await r.json(); window.genreQueue = d.tracks;
                 list.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('');
             } catch(e) { list.innerHTML = "❌ Ошибка загрузки жанра. Откройте вкладку Логи."; }
@@ -169,7 +172,7 @@
             const res = document.getElementById('search-results-list');
             res.innerHTML = "<p style='text-align:center; margin-top:50px;'>⏳ Ищем...</p>";
             try {
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`);
+                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}`, { headers: ngrokHeaders });
                 const d = await r.json(); window.searchQueue = d.tracks;
                 res.innerHTML = d.tracks.map((t, i) => buildTrackHTML(t, i, 'search')).join('');
             } catch(e) { res.innerHTML = "❌ Ошибка поиска. Откройте вкладку Логи."; }
@@ -215,7 +218,7 @@
 
             activeAudio.pause();
             try {
-                const r = await fetch(`${API}/stream/${t.id}?url=${encodeURIComponent(t.yt_url)}`);
+                const r = await fetch(`${API}/stream/${t.id}?url=${encodeURIComponent(t.yt_url)}`, { headers: ngrokHeaders });
                 if(r.status !== 200 && r.status !== 206) { 
                     console.error("Ошибка стрима:", r.status);
                     playNext(false); 
@@ -279,7 +282,7 @@
         function closeFullPlayer() { document.getElementById('full-player').classList.remove('open'); }
         function renderList(list, id, ctx) { document.getElementById(id).innerHTML = list.map((t, i) => buildTrackHTML(t, i, ctx)).join(''); }
 
-        // Добавляем верстку окна поиска (которую ты мог пропустить при прошлом копировании)
+        // Верстка окна поиска
         document.body.insertAdjacentHTML('beforeend', `
         <div id="search-overlay" style="position:fixed; top:100%; left:0; width:100%; height:100%; background:rgba(15,15,19,0.95); backdrop-filter:blur(10px); z-index:3000; transition:0.3s; padding:20px; display:flex; flex-direction:column;">
             <div style="display:flex; margin-bottom:15px; align-items:center;">
