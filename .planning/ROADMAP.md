@@ -2,7 +2,7 @@
 
 **Milestone:** Redesign v1 — гибридный Яндекс/Spotify UX
 **Source:** `REQUIREMENTS.md` + `research/{FEATURES,ARCHITECTURE,STACK,PITFALLS}.md`
-**Last updated:** 2026-04-15
+**Last updated:** 2026-04-15 (Phase 1 Plan 06 — overlay components: MiniPlayer, FullscreenPlayer, QueuePanel; 3/12 ARCH-3 components closed)
 
 ## Принципы последовательности
 
