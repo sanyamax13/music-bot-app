@@ -767,10 +767,176 @@
         })();
 
         // ===== PLAYBACK ENGINE =====
-        // (filled in Plan 04)
+        // Sole owner of audioA / audioB / activeAudio / nextAudio and playback Store keys
+        // (currentTrack, isPlaying, duration, playbackCtx, queue, queueIndex).
+        // MediaSession handlers are registered once from initMediaSession().
+        // See ARCHITECTURE.md §5. Phase 2 hot-spots (iOS unlock, named event handlers,
+        // setPositionState, seekto/seekbackward/seekforward, retry/error) are all local
+        // changes inside this IIFE — architecture deliberately leaves room for them.
+        const PlaybackEngine = (() => {
+          // Owned audio elements — нигде больше не читаются и не пишутся
+          const audioA = document.getElementById('audioA');
+          const audioB = document.getElementById('audioB');
+          let activeAudio = audioA;
+          let nextAudio = audioB;
+
+          // Internal feedback bookkeeping (was top-level in pre-refactor)
+          let currentTrackStart = 0;
+          let lastFeedbackSent = false;
+
+          // === MediaSession setup — once, on init ===
+          function initMediaSession() {
+            if (!('mediaSession' in navigator)) return;
+            navigator.mediaSession.setActionHandler('play',          () => toggle());
+            navigator.mediaSession.setActionHandler('pause',         () => toggle());
+            navigator.mediaSession.setActionHandler('previoustrack', () => prev());
+            navigator.mediaSession.setActionHandler('nexttrack',     () => next());
+            // seekto / seekbackward / seekforward / setPositionState — это AUDIO-3/4 в Phase 2, НЕ здесь
+          }
+
+          function setMetadata(t) {
+            if (!('mediaSession' in navigator)) return;
+            navigator.mediaSession.metadata = new MediaMetadata({
+              title:  t.title  || '',
+              artist: t.artist || '',
+              artwork: t.thumb ? [{ src: t.thumb, sizes: '512x512', type: 'image/jpeg' }] : [],
+            });
+          }
+
+          // === Public: play a context (queue + index) ===
+          function playContext(ctx, tracks, index) {
+            Store.set({ playbackCtx: ctx, queue: tracks.slice(), queueIndex: index });
+            return playAt(index);
+          }
+
+          // === Public: play track at index in current queue ===
+          async function playAt(i) {
+            const queue = Store.get('queue');
+            if (i < 0 || i >= queue.length) return;
+            Store.set({ queueIndex: i });
+            const t = queue[i];
+            Store.set({ currentTrack: t });
+
+            currentTrackStart = Date.now();
+            lastFeedbackSent = false;
+
+            // Swap dual buffers
+            const prev = activeAudio;
+            activeAudio = (activeAudio === audioA) ? audioB : audioA;
+            nextAudio   = (nextAudio   === audioA) ? audioB : audioA;
+            prev.pause();
+
+            const url = Api.streamUrl(t);
+            if (activeAudio.src !== url) {
+              activeAudio.src = url;
+            }
+
+            // Wire events on active buffer (use named handlers to enable removeEventListener
+            // hardening in Phase 2 / AUDIO-2 — for now keep .on* assignment to mirror current behavior)
+            activeAudio.ontimeupdate    = onTimeUpdate;
+            activeAudio.onended         = onTrackEnded;
+            activeAudio.onloadedmetadata = () => Store.set({ duration: activeAudio.duration || 0 });
+
+            setMetadata(t);
+
+            try {
+              await activeAudio.play();
+              Store.set({ isPlaying: true });
+              preloadNext();
+              autoExtendIfWave();
+            } catch (e) {
+              Store.set({ isPlaying: false });
+              console.warn('[PlaybackEngine] play() failed', e);
+            }
+          }
+
+          function preloadNext() {
+            const queue = Store.get('queue');
+            const idx = Store.get('queueIndex');
+            const next = queue[idx + 1];
+            if (!next) return;
+            nextAudio.src = Api.streamUrl(next);
+            nextAudio.preload = 'auto';
+            try { nextAudio.load(); } catch (e) {}
+          }
+
+          function autoExtendIfWave() {
+            if (Store.get('playbackCtx') !== 'wave') return;
+            const queue = Store.get('queue');
+            const idx = Store.get('queueIndex');
+            if (idx >= queue.length - 3 && typeof window.loadWave === 'function') {
+              window.loadWave(false);   // legacy entry — replaced by HomeScreen in Plan 07
+            }
+          }
+
+          function onTimeUpdate() {
+            // Position is read-through (NOT stored in Store) per ARCHITECTURE §2 to avoid 10Hz subscriber thrash.
+            // UI components read PlaybackEngine.getPosition() in their own rAF loops.
+          }
+
+          function onTrackEnded() {
+            sendFeedbackInternal('finish');
+            next();
+          }
+
+          function sendFeedbackInternal(action) {
+            if (lastFeedbackSent) return;
+            lastFeedbackSent = true;
+            const idx = Store.get('queueIndex');
+            if (idx < 0) return;
+            const t = Store.get('queue')[idx];
+            if (!t) return;
+            Api.feedback({
+              user_id: Tg.USER_ID,
+              track_id: t.id,
+              action,
+              elapsed: Math.round((Date.now() - currentTrackStart) / 1000),
+            }).catch(() => {});
+          }
+
+          // === Public controls ===
+          function play()  { if (activeAudio.src) { activeAudio.play(); Store.set({ isPlaying: true }); } }
+          function pause() { activeAudio.pause(); Store.set({ isPlaying: false }); }
+          function toggle() {
+            if (!activeAudio.src) return;
+            if (activeAudio.paused) play(); else pause();
+          }
+          function next() { sendFeedbackInternal('skip'); playAt(Store.get('queueIndex') + 1); }
+          function prev() { playAt(Store.get('queueIndex') - 1); }
+          function seek(seconds) {
+            if (!activeAudio.duration) return;
+            activeAudio.currentTime = Math.max(0, Math.min(seconds, activeAudio.duration));
+          }
+          function seekPct(pct) {
+            if (!activeAudio.duration) return;
+            activeAudio.currentTime = (pct / 100) * activeAudio.duration;
+          }
+
+          // === Read-through position (called from rAF loops in components) ===
+          function getPosition() { return activeAudio.currentTime || 0; }
+          function getDuration() { return activeAudio.duration || 0; }
+          function isPaused()    { return activeAudio.paused; }
+
+          // === Internal feedback exposure (until full Feedback module in Phase 2) ===
+          function sendManualFeedback(action) { sendFeedbackInternal(action); }
+
+          initMediaSession();
+
+          return {
+            playContext, playAt, play, pause, toggle, next, prev,
+            seek, seekPct, getPosition, getDuration, isPaused,
+            sendManualFeedback,
+          };
+        })();
 
         // ===== FEEDBACK =====
-        // (filled in Plan 04 — minimal stub; full queue is Phase 2)
+        // Phase 1 stub. Real reliable queue (with localStorage backing + visibilitychange flush)
+        // is Phase 2 scope. For now Feedback is just a thin pass-through to Api so call sites
+        // (PlaybackEngine.sendFeedbackInternal, future Wave swipes) have a stable name to call.
+        const Feedback = (() => {
+          function send(event) { return Api.feedback(event).catch(() => {}); }
+          return { send };
+        })();
 
         // ===== ROUTER =====
         // (filled in Plan 05)
