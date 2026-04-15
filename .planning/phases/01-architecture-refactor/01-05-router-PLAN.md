@@ -84,13 +84,22 @@ const Router = (() => {
     else           Tg.tg.BackButton.hide();
   }
 
+  // === Overlay mutators — Router is the ONLY writer of fullscreenOpen / queuePanelOpen ===
+  // Components (MiniPlayer, FullscreenPlayer, QueuePanel) MUST call these instead of
+  // writing Store.set({ fullscreenOpen: ... }) directly. This enforces ARCH-1
+  // "exactly one module writes each key" for the overlay flags.
+  function openFullscreen()  { Store.set({ fullscreenOpen: true });  }
+  function closeFullscreen() { Store.set({ fullscreenOpen: false }); }
+  function openQueuePanel()  { Store.set({ queuePanelOpen: true });  }
+  function closeQueuePanel() { Store.set({ queuePanelOpen: false }); }
+
   // Wire BackButton once
   Tg.tg.BackButton.onClick(back);
 
   // React to overlay flag changes from other modules
   Store.subscribe(['fullscreenOpen', 'queuePanelOpen'], updateBackButton);
 
-  return { go, back, updateBackButton };
+  return { go, back, updateBackButton, openFullscreen, closeFullscreen, openQueuePanel, closeQueuePanel };
 })();
 ```
 
@@ -130,9 +139,14 @@ Inline onclick'и в HTML markup (строки 480–484): `onclick="switchTab('
     - `grep -c "Tg.tg.BackButton.onClick(back)" index.html` → `1`
     - `grep -cE "Store\.subscribe\(\['fullscreenOpen', ?'queuePanelOpen'\]" index.html` → `1`
     - `grep -c "queuePanelOpen.*fullscreenOpen.*stack" index.html` ≥ `0` (комментарий-документация precedence; не критично, но желательно)
+    - `grep -c "function openFullscreen()" index.html` → `1`
+    - `grep -c "function closeFullscreen()" index.html` → `1`
+    - `grep -c "function openQueuePanel()" index.html` → `1`
+    - `grep -c "function closeQueuePanel()" index.html` → `1`
     - В DevTools console: `typeof Router.go === 'function'` → `true`
+    - В DevTools console: `typeof Router.openFullscreen === 'function' && typeof Router.closeFullscreen === 'function'` → `true`
   </acceptance_criteria>
-  <done>Router IIFE существует, BackButton подключён, подписка на overlay-флаги работает.</done>
+  <done>Router IIFE существует, BackButton подключён, подписка на overlay-флаги работает, экспортируются overlay-мутаторы для компонентов.</done>
 </task>
 
 <task type="auto">
@@ -169,11 +183,12 @@ Store.subscribe(['screen'], (state) => {
 });
 ```
 
-3. **Заменить openFullPlayer/closeFullPlayer** на Store-driven:
+3. **Заменить openFullPlayer/closeFullPlayer** на тонкие делегаты в Router (Router — единственный writer ключа `fullscreenOpen`):
 ```js
-function openFullPlayer()  { Store.set({ fullscreenOpen: true });  }
-function closeFullPlayer() { Store.set({ fullscreenOpen: false }); }
+function openFullPlayer()  { Router.openFullscreen();  }
+function closeFullPlayer() { Router.closeFullscreen(); }
 ```
+Это — legacy-глобалы для inline `onclick` из markup'а. Компоненты (MiniPlayer в Plan 06, FullscreenPlayer в Plan 06) ОБЯЗАНЫ звать `Router.openFullscreen()` / `Router.closeFullscreen()` напрямую, а не `Store.set({ fullscreenOpen })`. Это enforce'ит ARCH-1 «один writer на ключ».
 
 4. Подписаться на `fullscreenOpen` для синхронизации DOM:
 ```js
@@ -196,12 +211,12 @@ Store.subscribe(['fullscreenOpen'], (state) => {
   </verify>
   <acceptance_criteria>
     - `grep -c "Router.go(tab" index.html` → `1`
-    - `grep -cE "function openFullPlayer\(\) +\{ +Store\.set\(\{ fullscreenOpen: true" index.html` → `1`
-    - `grep -cE "function closeFullPlayer\(\) +\{ +Store\.set\(\{ fullscreenOpen: false" index.html` → `1`
+    - `grep -cE "function openFullPlayer\(\) +\{ +Router\.openFullscreen" index.html` → `1`
+    - `grep -cE "function closeFullPlayer\(\) +\{ +Router\.closeFullscreen" index.html` → `1`
     - `grep -cE "Store\.subscribe\(\['screen'\]" index.html` → `1`
     - `grep -cE "Store\.subscribe\(\['fullscreenOpen'\]" index.html` → `1`
     - **One-writer audit для `screen`:** `grep -c "Store.set({ screen:" index.html` — каждое совпадение должно быть **только внутри Router IIFE**. Допустимые строки: `Store.set({ screen });` внутри `Router.go` и `Store.set({ screen: stack.pop() })` внутри `Router.back`. Проверить через `grep -n` что других нет.
-    - **One-writer audit для `fullscreenOpen`:** writers — `openFullPlayer()` и `closeFullPlayer()` (legacy delegate-функции, owner=Router de-facto, потому что они единственные сеттеры и вызываются из inline onclick). Других сеттеров нет.
+    - **One-writer audit для `fullscreenOpen`:** все `Store.set({ fullscreenOpen:` присвоения должны быть **только внутри Router IIFE** (в функциях `openFullscreen`, `closeFullscreen` и в `back()` при queuePanelOpen/fullscreenOpen precedence). Проверка: `grep -n "Store.set({ fullscreenOpen" index.html` — все совпадения между `const Router = (() =>` и соответствующим `})();`. Компоненты MiniPlayer/FullscreenPlayer НЕ должны содержать `Store.set({ fullscreenOpen` — только `Router.openFullscreen()` / `Router.closeFullscreen()`. Аналогично для `queuePanelOpen`.
     - Browser smoke: открыть страницу → видна Wave (трансформация подписки) → тапнуть Поиск → переключение → tg.BackButton НЕ показывается (мы на root-уровне табов) → тапнуть Wave → играть трек → тап на mini-player → fullscreen открывается → tg.BackButton ПОЯВЛЯЕТСЯ → нажать BackButton (или ▾) → fullscreen закрывается → BackButton ИСЧЕЗАЕТ → переключить таб с открытым FP → fullscreen остаётся открытым (overlay не привязан к screen) → переключить таб обратно → плеер по-прежнему играет.
   </acceptance_criteria>
   <done>Router владеет навигацией; BackButton управляется из одного места; полноэкранный плеер — overlay, переживающий смену таба.</done>
