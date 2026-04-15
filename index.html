@@ -543,10 +543,6 @@
             return { tg, USER_ID };
         })();
 
-        // === TEMP shims for Plans 02–08 — trimmed in Plan 07; final cleanup in Plan 08 ===
-        const tg = Tg.tg;
-        const USER_ID = Tg.USER_ID;
-
         // ===== STORE =====
         // Single source of truth for app state. See ARCHITECTURE.md §2.
         // Exactly one module owns each key (enforced by convention — see owner comments).
@@ -632,52 +628,6 @@
 
           return { get, set, subscribe, _state: state };  // _state exposed only for debugging
         })();
-
-        // === LEGACY shims for Plans 02→04 — these will be removed in Plan 04 (PlaybackEngine takeover) ===
-        // Each shim is a getter/setter pair on window so old `currentQueue = tracks` style writes
-        // and `currentQueue.length` reads keep working while the actual store is Store._state.
-        // NOTE: only REASSIGNMENT flows through Store; in-place mutation (.push, .splice, arr[i]=)
-        // bypasses the setter. The pre-refactor code uses reassignment everywhere — don't add in-place mutations.
-        Object.defineProperty(window, 'currentQueue', {
-          get: () => Store.get('queue'),
-          set: (v) => Store.set({ queue: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'currentIndex', {
-          get: () => Store.get('queueIndex'),
-          set: (v) => Store.set({ queueIndex: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'currentCtx', {
-          get: () => Store.get('playbackCtx'),
-          set: (v) => Store.set({ playbackCtx: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'waveMood', {
-          get: () => Store.get('waveMood'),
-          set: (v) => Store.set({ waveMood: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'waveLoading', {
-          get: () => Store.get('waveLoading'),
-          set: (v) => Store.set({ waveLoading: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'waveEnded', {
-          get: () => Store.get('waveEnded'),
-          set: (v) => Store.set({ waveEnded: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'activeSource', {
-          get: () => Store.get('activeSource'),
-          set: (v) => Store.set({ activeSource: v }),
-          configurable: true,
-        });
-        Object.defineProperty(window, 'activeModalSource', {
-          get: () => Store.get('activeModalSource'),
-          set: (v) => Store.set({ activeModalSource: v }),
-          configurable: true,
-        });
 
         // ===== API =====
         // Single bridge between frontend and https://api.vdsmusic.ru:8443.
@@ -835,8 +785,8 @@
             if (Store.get('playbackCtx') !== 'wave') return;
             const queue = Store.get('queue');
             const idx = Store.get('queueIndex');
-            if (idx >= queue.length - 3 && typeof window.loadWave === 'function') {
-              window.loadWave(false);   // legacy entry — replaced by HomeScreen in Plan 07
+            if (idx >= queue.length - 3) {
+              HomeScreen.loadWave(false);
             }
           }
 
@@ -1571,57 +1521,44 @@
         })();
 
         // ===== BOOT =====
-        // (filled in Plan 08)
+        // Single entry-point. All mounts in dependency order (overlays → screens → nav → modal).
+        // Called synchronously at the bottom of the script — DOM is ready because the script
+        // tag lives at the end of <body>.
+        function Boot() {
+          // Mount overlays (always present; visibility toggled via Store flags)
+          MiniPlayer.mount(document.getElementById('mini-player'));
+          FullscreenPlayer.mount(document.getElementById('full-player'));
+          QueuePanel.mount(document.getElementById('queue-panel'));
 
-        // Audio dual-buffer + feedback bookkeeping moved into PlaybackEngine IIFE (Plan 04).
-        // currentQueue/currentIndex/currentCtx/waveMood/waveLoading/waveEnded live in Store
-        // and are exposed via window.* shims (defined above).
-        // activeSource / activeModalSource also live in Store via window.* shims.
+          // Mount screens (all 5 mounted once; tab visibility toggled by screen subscribe below)
+          HomeScreen.mount(document.getElementById('tab-wave'));
+          SearchScreen.mount(document.getElementById('tab-search'));
+          GenreScreen.mount(document.getElementById('tab-genres'));
+          LibraryScreen.mount(document.getElementById('tab-collection'));
+          ProfileScreen.mount(document.getElementById('tab-profile'));
 
-        // ============ Legacy shims kept until Plan 08 ============
-        // likeTrack / dislikeTrack thin shims — FullscreenPlayer hydrate still calls
-        // Api.like directly for the 🤍 button; these two functions are retained for
-        // any remaining call sites (none in markup after Plan 07, removed in Plan 08).
-        function likeTrack(t)    { return Api.like(t).catch(() => {}); }
-        function dislikeTrack(t) { return Api.dislike(t).catch(() => {}); }
+          // Mount chrome
+          BottomNav.mount(document.querySelector('.bottom-nav'));
 
-        // === Screen visibility sync — Plan 05 temporary bridge with inline lazy-loads
-        // has been REPLACED by component-driven mount. Only tab-view toggle remains
-        // until Plan 08 moves it into Boot. ===
-        Store.subscribe(['screen'], (state) => {
-            const s = state.screen;
+          // Mount search modal (FAB overlay — not a screen)
+          SearchModal.mount(document.getElementById('search-overlay'));
+
+          // FAB → open search modal
+          const fab = document.getElementById('fab-search');
+          if (fab) fab.onclick = () => SearchModal.open();
+
+          // Tab visibility sync (Phase 12 will replace this with proper mount/unmount)
+          Store.subscribe(['screen'], (state) => {
             document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
-            const tabEl = document.getElementById('tab-' + s);
+            const tabEl = document.getElementById('tab-' + state.screen);
             if (tabEl) tabEl.classList.add('active');
-        });
+          });
 
-        // === Fullscreen overlay visibility bridge (idempotent dup of FullscreenPlayer.syncOpen — Plan 08 cleanup) ===
-        Store.subscribe(['fullscreenOpen'], (state) => {
-            const fp = document.getElementById('full-player');
-            if (!fp) return;
-            fp.classList.toggle('open', state.fullscreenOpen);
-        });
+          // Seed Router with initial 'wave' screen (no history push)
+          Router.go('wave', { push: false });
+        }
 
-        // ============ INIT ============
-        // Plan 08 will reorganize all mounts into a Boot() IIFE. For now we mount
-        // overlay components (Plan 06) + screen components (Plan 07) directly.
-        MiniPlayer.mount(document.getElementById('mini-player'));
-        FullscreenPlayer.mount(document.getElementById('full-player'));
-        QueuePanel.mount(document.getElementById('queue-panel'));
-
-        HomeScreen.mount(document.getElementById('tab-wave'));
-        SearchScreen.mount(document.getElementById('tab-search'));
-        GenreScreen.mount(document.getElementById('tab-genres'));
-        LibraryScreen.mount(document.getElementById('tab-collection'));
-        ProfileScreen.mount(document.getElementById('tab-profile'));
-        SearchModal.mount(document.getElementById('search-overlay'));
-        BottomNav.mount(document.querySelector('.bottom-nav'));
-
-        // FAB → SearchModal.open()
-        document.getElementById('fab-search').onclick = () => SearchModal.open();
-
-        // Seed Router for initial 'wave' screen
-        Router.go('wave', { push: false });
+        Boot();
     </script>
 </body>
 </html>
