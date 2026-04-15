@@ -1003,17 +1003,9 @@
         // activeSource / activeModalSource also live in Store via window.* shims.
 
         // ============ TABS ============
+        // Thin delegate — Router owns navigation state. Tabs are root-level (push:false).
         function switchTab(tab, el) {
-            document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
-            document.getElementById('tab-' + tab).classList.add('active');
-            document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-            el.classList.add('active');
-
-            if (tab === 'wave' && !document.getElementById('wave-list').innerHTML) {
-                loadMoods(); loadWave(true);
-            }
-            if (tab === 'collection') loadCollection();
-            if (tab === 'profile') loadProfile();
+            Router.go(tab, { push: false });
         }
 
         // ============ WAVE ============
@@ -1303,8 +1295,9 @@
         // Legacy global for inline onclick handlers in FP markup (👎 / 👍)
         function sendFeedback(action) { PlaybackEngine.sendManualFeedback(action); }
 
-        function openFullPlayer() { document.getElementById('full-player').classList.add('open'); }
-        function closeFullPlayer() { document.getElementById('full-player').classList.remove('open'); }
+        // Legacy globals for inline onclick in markup — delegate to Router (sole writer of fullscreenOpen).
+        function openFullPlayer()  { Router.openFullscreen();  }
+        function closeFullPlayer() { Router.closeFullscreen(); }
 
         function likeTrack(t) {
             Api.like(t).catch(() => {});
@@ -1364,12 +1357,36 @@
             requestAnimationFrame(tickFpProgress);
         })();
 
+        // === Screen visibility sync (will be replaced by component mount/unmount in Plan 07) ===
+        Store.subscribe(['screen'], (state) => {
+            const s = state.screen;
+            document.querySelectorAll('.tab-view').forEach(v => v.classList.remove('active'));
+            const tabEl = document.getElementById('tab-' + s);
+            if (tabEl) tabEl.classList.add('active');
+            document.querySelectorAll('.nav-item').forEach(n => {
+                n.classList.toggle('active', n.dataset.tab === s);
+            });
+            // Lazy-load existing screens (preserves current behavior)
+            if (s === 'wave' && !document.getElementById('wave-list').innerHTML) { loadMoods(); loadWave(true); }
+            if (s === 'collection') loadCollection();
+            if (s === 'profile')    loadProfile();
+        });
+
+        // === Fullscreen overlay visibility sync (will be replaced by FullscreenPlayer component in Plan 06) ===
+        Store.subscribe(['fullscreenOpen'], (state) => {
+            const fp = document.getElementById('full-player');
+            if (!fp) return;
+            fp.classList.toggle('open', state.fullscreenOpen);
+        });
+
         // ============ INIT ============
         renderGenres();
         setupSearchTab();
         setupSearchModal();
         loadMoods();
         loadWave(true);
+        // Seed BottomNav active class + run screen subscriber for initial 'wave' screen
+        Router.go('wave', { push: false });
     </script>
 </body>
 </html>
