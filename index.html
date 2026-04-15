@@ -732,14 +732,11 @@
         const audioB = document.getElementById('audioB');
         let activeAudio = audioA, nextAudio = audioB;
 
-        // Queues
-        let currentQueue = [], currentIndex = -1, currentCtx = 'wave';
-        let waveMood = '', waveLoading = false, waveEnded = false;
+        // Queues — currentQueue/currentIndex/currentCtx/waveMood/waveLoading/waveEnded
+        // now live in Store (see STORE section above) and are exposed via window.* shims.
+        // These two remain here — internal PlaybackEngine state, migrated in Plan 04:
         let currentTrackStart = 0, lastFeedbackSent = false;
-
-        // Active source UI state (moved to Store in Plan 02)
-        let activeSource = 'all';
-        let activeModalSource = 'all';
+        // activeSource / activeModalSource also moved to Store via window.* shims.
 
         // ============ TABS ============
         function switchTab(tab, el) {
