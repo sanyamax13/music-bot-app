@@ -504,13 +504,78 @@
         // =====================================================================
 
         // ===== CONFIG =====
-        // (filled in Plan 01)
+        const Config = (() => {
+            const API = "https://api.vdsmusic.ru:8443";
+            const SOURCES = [
+                { id: 'all', name: 'Всё' },
+                { id: 'library', name: 'Библиотека' },
+                { id: 'youtube', name: 'YouTube' },
+                { id: 'soundcloud', name: 'SoundCloud' },
+                { id: 'jamendo', name: 'Jamendo' },
+            ];
+            const SOURCE_ICONS = {
+                local: '🎵', library: '🎵',
+                youtube: '▶️',
+                soundcloud: '☁️',
+                jamendo: '🎶',
+            };
+            const GENRES = [
+                { name: 'Pop',           emoji: '🎤', grad: 'linear-gradient(135deg, #ff6b9d, #c44569)' },
+                { name: 'Rock',          emoji: '🎸', grad: 'linear-gradient(135deg, #ee5a6f, #7d2d34)' },
+                { name: 'Hip-Hop',       emoji: '🎧', grad: 'linear-gradient(135deg, #ffa502, #ff6348)' },
+                { name: 'Electronic',    emoji: '🎛️', grad: 'linear-gradient(135deg, #00d2ff, #3a47d5)' },
+                { name: 'Jazz',          emoji: '🎷', grad: 'linear-gradient(135deg, #b65f29, #5d2e0d)' },
+                { name: 'Classical',     emoji: '🎻', grad: 'linear-gradient(135deg, #667eea, #2c3e6c)' },
+                { name: 'R&B',           emoji: '💫', grad: 'linear-gradient(135deg, #8e44ad, #3a1c5c)' },
+                { name: 'Metal',         emoji: '🤘', grad: 'linear-gradient(135deg, #424242, #000)' },
+                { name: 'Indie',         emoji: '🌿', grad: 'linear-gradient(135deg, #56ab2f, #1e4620)' },
+                { name: 'Lo-fi',         emoji: '🌙', grad: 'linear-gradient(135deg, #485563, #29323c)' },
+                { name: 'K-Pop',         emoji: '💖', grad: 'linear-gradient(135deg, #f093fb, #c94b9e)' },
+                { name: 'Reggaeton',     emoji: '🔥', grad: 'linear-gradient(135deg, #ff9966, #ff2e1f)' },
+                { name: 'Ambient',       emoji: '🌌', grad: 'linear-gradient(135deg, #5ee7df, #2a5470)' },
+                { name: 'House',         emoji: '🏠', grad: 'linear-gradient(135deg, #4facfe, #003a7a)' },
+                { name: 'Drum & Bass',   emoji: '🥁', grad: 'linear-gradient(135deg, #f78ca0, #8d3741)' },
+                { name: 'Русский рэп',   emoji: '🇷🇺', grad: 'linear-gradient(135deg, #d6336c, #5a0f2e)' },
+                { name: 'Русский рок',   emoji: '⚡', grad: 'linear-gradient(135deg, #c0392b, #4a1410)' },
+                { name: 'Шансон',        emoji: '🎭', grad: 'linear-gradient(135deg, #8b6914, #3d2a05)' },
+            ];
+            return { API, SOURCES, SOURCE_ICONS, GENRES };
+        })();
 
         // ===== UTILS =====
-        // (filled in Plan 01)
+        const Utils = (() => {
+            function fmtTime(s) {
+                if (!s || !isFinite(s)) return '0:00';
+                const m = Math.floor(s / 60);
+                const sec = Math.floor(s % 60);
+                return `${m}:${sec < 10 ? '0' : ''}${sec}`;
+            }
+            function escapeHtml(s) {
+                return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+            }
+            function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
+            return { fmtTime, escapeHtml, escapeAttr };
+        })();
 
         // ===== TELEGRAM =====
-        // (filled in Plan 01)
+        const Tg = (() => {
+            const tg = window.Telegram.WebApp;
+            tg.expand();
+            tg.setHeaderColor('#0f0f13');
+            const USER_ID = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0;
+            return { tg, USER_ID };
+        })();
+
+        // === TEMP shims for Plans 02–08 — will be removed plan by plan ===
+        const API = Config.API;
+        const SOURCES = Config.SOURCES;
+        const SOURCE_ICONS = Config.SOURCE_ICONS;
+        const GENRES = Config.GENRES;
+        const tg = Tg.tg;
+        const USER_ID = Tg.USER_ID;
+        const fmtTime = Utils.fmtTime;
+        const escapeHtml = Utils.escapeHtml;
+        const escapeAttr = Utils.escapeAttr;
 
         // ===== STORE =====
         // (filled in Plan 02)
@@ -533,13 +598,6 @@
         // ===== BOOT =====
         // (filled in Plan 08)
 
-        const API = "https://api.vdsmusic.ru:8443";
-
-        const tg = window.Telegram.WebApp;
-        tg.expand();
-        tg.setHeaderColor('#0f0f13');
-        const USER_ID = (tg.initDataUnsafe && tg.initDataUnsafe.user && tg.initDataUnsafe.user.id) || 0;
-
         // Audio dual-buffer
         const audioA = document.getElementById('audioA');
         const audioB = document.getElementById('audioB');
@@ -550,44 +608,9 @@
         let waveMood = '', waveLoading = false, waveEnded = false;
         let currentTrackStart = 0, lastFeedbackSent = false;
 
-        // Sources
-        const SOURCES = [
-            { id: 'all', name: 'Всё' },
-            { id: 'library', name: 'Библиотека' },
-            { id: 'youtube', name: 'YouTube' },
-            { id: 'soundcloud', name: 'SoundCloud' },
-            { id: 'jamendo', name: 'Jamendo' },
-        ];
-        const SOURCE_ICONS = {
-            local: '🎵', library: '🎵',
-            youtube: '▶️',
-            soundcloud: '☁️',
-            jamendo: '🎶',
-        };
+        // Active source UI state (moved to Store in Plan 02)
         let activeSource = 'all';
         let activeModalSource = 'all';
-
-        // Genres
-        const GENRES = [
-            { name: 'Pop',           emoji: '🎤', grad: 'linear-gradient(135deg, #ff6b9d, #c44569)' },
-            { name: 'Rock',          emoji: '🎸', grad: 'linear-gradient(135deg, #ee5a6f, #7d2d34)' },
-            { name: 'Hip-Hop',       emoji: '🎧', grad: 'linear-gradient(135deg, #ffa502, #ff6348)' },
-            { name: 'Electronic',    emoji: '🎛️', grad: 'linear-gradient(135deg, #00d2ff, #3a47d5)' },
-            { name: 'Jazz',          emoji: '🎷', grad: 'linear-gradient(135deg, #b65f29, #5d2e0d)' },
-            { name: 'Classical',     emoji: '🎻', grad: 'linear-gradient(135deg, #667eea, #2c3e6c)' },
-            { name: 'R&B',           emoji: '💫', grad: 'linear-gradient(135deg, #8e44ad, #3a1c5c)' },
-            { name: 'Metal',         emoji: '🤘', grad: 'linear-gradient(135deg, #424242, #000)' },
-            { name: 'Indie',         emoji: '🌿', grad: 'linear-gradient(135deg, #56ab2f, #1e4620)' },
-            { name: 'Lo-fi',         emoji: '🌙', grad: 'linear-gradient(135deg, #485563, #29323c)' },
-            { name: 'K-Pop',         emoji: '💖', grad: 'linear-gradient(135deg, #f093fb, #c94b9e)' },
-            { name: 'Reggaeton',     emoji: '🔥', grad: 'linear-gradient(135deg, #ff9966, #ff2e1f)' },
-            { name: 'Ambient',       emoji: '🌌', grad: 'linear-gradient(135deg, #5ee7df, #2a5470)' },
-            { name: 'House',         emoji: '🏠', grad: 'linear-gradient(135deg, #4facfe, #003a7a)' },
-            { name: 'Drum & Bass',   emoji: '🥁', grad: 'linear-gradient(135deg, #f78ca0, #8d3741)' },
-            { name: 'Русский рэп',   emoji: '🇷🇺', grad: 'linear-gradient(135deg, #d6336c, #5a0f2e)' },
-            { name: 'Русский рок',   emoji: '⚡', grad: 'linear-gradient(135deg, #c0392b, #4a1410)' },
-            { name: 'Шансон',        emoji: '🎭', grad: 'linear-gradient(135deg, #8b6914, #3d2a05)' },
-        ];
 
         // ============ TABS ============
         function switchTab(tab, el) {
@@ -1036,18 +1059,6 @@
             const t = currentQueue[currentIndex];
             likeTrack(t);
         }
-
-        // ============ UTILS ============
-        function fmtTime(s) {
-            if (!s || !isFinite(s)) return '0:00';
-            const m = Math.floor(s / 60);
-            const sec = Math.floor(s % 60);
-            return `${m}:${sec < 10 ? '0' : ''}${sec}`;
-        }
-        function escapeHtml(s) {
-            return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-        }
-        function escapeAttr(s) { return String(s).replace(/'/g, "\\'"); }
 
         // ============ INIT ============
         renderGenres();
