@@ -472,6 +472,7 @@
             <div onclick="sendFeedback('like')">👍</div>
         </div>
     </div>
+    <div id="queue-panel" style="display:none"></div>
 
     <audio id="audioA" playsinline preload="auto"></audio>
     <audio id="audioB" playsinline preload="auto"></audio>
@@ -1180,6 +1181,57 @@
           return { mount, destroy };
         })();
 
+        const QueuePanel = (() => {
+          let root, unsub, unsubOpen;
+
+          function template(state) {
+            // Phase 1 stub. Real bottom-sheet UI with History/Now Playing/Up Next sections,
+            // SortableJS reorder, swipe-left remove, long-press action sheet — Phase 6.
+            const queue = state.queue || [];
+            const idx = state.queueIndex;
+            if (!queue.length) return `<p class="empty">Очередь пуста</p>`;
+            return `
+              <div class="qp-list">
+                ${queue.map((t, i) => `
+                  <div class="qp-row${i === idx ? ' is-current' : ''}">
+                    <span class="qp-title">${Utils.escapeHtml(t.title || '')}</span>
+                    <span class="qp-artist">${Utils.escapeHtml(t.artist || '')}</span>
+                  </div>
+                `).join('')}
+              </div>
+            `;
+          }
+
+          function render() {
+            if (!root) return;
+            root.innerHTML = template({
+              queue: Store.get('queue'),
+              queueIndex: Store.get('queueIndex'),
+            });
+          }
+
+          function syncOpen() {
+            const open = Store.get('queuePanelOpen');
+            root.style.display = open ? 'block' : 'none';
+          }
+
+          function mount(el) {
+            root = el;
+            unsub     = Store.subscribe(['queue', 'queueIndex'], render);
+            unsubOpen = Store.subscribe(['queuePanelOpen'], syncOpen);
+            render();
+            syncOpen();
+          }
+
+          function destroy() {
+            if (unsub)     unsub();
+            if (unsubOpen) unsubOpen();
+            if (root) root.innerHTML = '';
+          }
+
+          return { mount, render, destroy };
+        })();
+
         // ===== BOOT =====
         // (filled in Plan 08)
 
@@ -1535,6 +1587,7 @@
         // Mount overlay components (Plan 06) — DOM is ready, Store + Router defined above.
         MiniPlayer.mount(document.getElementById('mini-player'));
         FullscreenPlayer.mount(document.getElementById('full-player'));
+        QueuePanel.mount(document.getElementById('queue-panel'));
 
         renderGenres();
         setupSearchTab();
