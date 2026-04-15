@@ -863,7 +863,7 @@
             nextAudio = (nextAudio === audioA) ? audioB : audioA;
             prev.pause();
 
-            const streamUrl = t.stream_url || `${API}/stream?user_id=${USER_ID}&track_id=${encodeURIComponent(t.id || '')}`;
+            const streamUrl = `${API}/stream/${encodeURIComponent(t.id || '')}?source=${encodeURIComponent(t.source || '')}&url=${encodeURIComponent(t.stream_url || '')}`;
 
             // Reuse preloaded buffer if possible
             if (activeAudio.src !== streamUrl) {
@@ -891,7 +891,7 @@
         function preloadNext() {
             const next = currentQueue[currentIndex + 1];
             if (!next) return;
-            const url = next.stream_url || `${API}/stream?user_id=${USER_ID}&track_id=${encodeURIComponent(next.id || '')}`;
+            const url = `${API}/stream/${encodeURIComponent(next.id || '')}?source=${encodeURIComponent(next.source || '')}&url=${encodeURIComponent(next.stream_url || '')}`;
             nextAudio.src = url;
             nextAudio.preload = 'auto';
             try { nextAudio.load(); } catch (e) {}
