@@ -567,7 +567,6 @@
         })();
 
         // === TEMP shims for Plans 02–08 — will be removed plan by plan ===
-        const API = Config.API;
         const SOURCES = Config.SOURCES;
         const SOURCE_ICONS = Config.SOURCE_ICONS;
         const GENRES = Config.GENRES;
@@ -810,8 +809,7 @@
         // ============ WAVE ============
         async function loadMoods() {
             try {
-                const r = await fetch(`${API}/wave/moods?user_id=${USER_ID}`);
-                const d = await r.json();
+                const d = await Api.waveMoods();
                 const moods = d.moods || [];
                 const scroll = document.getElementById('mood-scroll');
                 scroll.innerHTML = `<div class="mood-card active" onclick="selectMood('', this)">✨ Все</div>` +
@@ -837,9 +835,7 @@
             waveLoading = true;
             document.getElementById('wave-loader').style.display = 'block';
             try {
-                const url = `${API}/wave?user_id=${USER_ID}&mood=${encodeURIComponent(waveMood)}`;
-                const r = await fetch(url);
-                const d = await r.json();
+                const d = await Api.wave(waveMood);
                 const tracks = d.tracks || [];
                 if (!tracks.length) { waveEnded = true; }
                 if (reset) { currentQueue = tracks.slice(); }
@@ -900,12 +896,11 @@
             if (!q) { res.innerHTML = '<p class="empty">Начните вводить запрос</p>'; return; }
             res.innerHTML = '<p class="loading">Ищем…</p>';
             try {
-                const srcParam = activeSource === 'all' ? '' : `&sources=${activeSource}`;
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}${srcParam}&user_id=${USER_ID}`);
-                const d = await r.json();
-                window.searchTabQueue = d.tracks || [];
-                res.innerHTML = window.searchTabQueue.length
-                    ? window.searchTabQueue.map((t, i) => buildTrackHTML(t, i, 'search-tab')).join('')
+                const d = await Api.search(q, activeSource);
+                const tracks = d.tracks || [];
+                Store.set({ searchTabResults: tracks });
+                res.innerHTML = tracks.length
+                    ? tracks.map((t, i) => buildTrackHTML(t, i, 'search-tab')).join('')
                     : '<p class="empty">Ничего не найдено</p>';
             } catch (e) {
                 res.innerHTML = '<p class="empty">Ошибка поиска</p>';
@@ -940,12 +935,11 @@
             if (!q) { res.innerHTML = '<p class="empty">Введите запрос для поиска</p>'; return; }
             res.innerHTML = '<p class="loading">Ищем…</p>';
             try {
-                const srcParam = activeModalSource === 'all' ? '' : `&sources=${activeModalSource}`;
-                const r = await fetch(`${API}/search?q=${encodeURIComponent(q)}${srcParam}&user_id=${USER_ID}`);
-                const d = await r.json();
-                window.searchModalQueue = d.tracks || [];
-                res.innerHTML = window.searchModalQueue.length
-                    ? window.searchModalQueue.map((t, i) => buildTrackHTML(t, i, 'search-modal')).join('')
+                const d = await Api.search(q, activeModalSource);
+                const tracks = d.tracks || [];
+                Store.set({ searchModalResults: tracks });
+                res.innerHTML = tracks.length
+                    ? tracks.map((t, i) => buildTrackHTML(t, i, 'search-modal')).join('')
                     : '<p class="empty">Ничего не найдено</p>';
             } catch (e) {
                 res.innerHTML = '<p class="empty">Ошибка поиска</p>';
@@ -968,11 +962,11 @@
             const list = document.getElementById('genre-list');
             list.innerHTML = '<p class="loading">Загружаем…</p>';
             try {
-                const r = await fetch(`${API}/genre?q=${encodeURIComponent(name)}&user_id=${USER_ID}`);
-                const d = await r.json();
-                window.genreQueue = d.tracks || [];
-                list.innerHTML = window.genreQueue.length
-                    ? window.genreQueue.map((t, i) => buildTrackHTML(t, i, 'genre')).join('')
+                const d = await Api.genre(name);
+                const tracks = d.tracks || [];
+                Store.set({ genreResults: tracks });
+                list.innerHTML = tracks.length
+                    ? tracks.map((t, i) => buildTrackHTML(t, i, 'genre')).join('')
                     : '<p class="empty">Пусто</p>';
             } catch (e) {
                 list.innerHTML = '<p class="empty">Ошибка загрузки</p>';
@@ -988,11 +982,11 @@
             const res = document.getElementById('collection-results');
             res.innerHTML = '<p class="loading">Загружаем лайки…</p>';
             try {
-                const r = await fetch(`${API}/library/likes?user_id=${USER_ID}`);
-                const d = await r.json();
-                window.collectionQueue = d.tracks || [];
-                res.innerHTML = window.collectionQueue.length
-                    ? window.collectionQueue.map((t, i) => buildTrackHTML(t, i, 'collection')).join('')
+                const d = await Api.likes();
+                const tracks = d.tracks || [];
+                Store.set({ collectionResults: tracks });
+                res.innerHTML = tracks.length
+                    ? tracks.map((t, i) => buildTrackHTML(t, i, 'collection')).join('')
                     : '<p class="empty">Пока нет лайков</p>';
             } catch (e) {
                 res.innerHTML = '<p class="empty">Ошибка загрузки</p>';
@@ -1002,12 +996,10 @@
         // ============ PROFILE ============
         async function loadProfile() {
             try {
-                const [tasteR, statsR] = await Promise.all([
-                    fetch(`${API}/taste/${USER_ID}`),
-                    fetch(`${API}/library/stats?user_id=${USER_ID}`),
+                const [taste, stats] = await Promise.all([
+                    Api.taste(),
+                    Api.stats(),
                 ]);
-                const taste = await tasteR.json();
-                const stats = await statsR.json();
                 renderTaste(taste.tags || []);
                 renderStats(stats);
             } catch (e) {
@@ -1047,7 +1039,7 @@
         async function resetTaste() {
             if (!confirm('Сбросить вкусовой профиль?')) return;
             try {
-                await fetch(`${API}/taste/reset?user_id=${USER_ID}`, { method: 'POST' });
+                await Api.tasteReset();
                 loadProfile();
             } catch (e) {}
         }
@@ -1074,10 +1066,10 @@
         function playFromContext(i, ctx) {
             currentCtx = ctx;
             if (ctx === 'wave') { /* wave uses currentQueue already */ }
-            else if (ctx === 'genre') currentQueue = window.genreQueue || [];
-            else if (ctx === 'collection') currentQueue = window.collectionQueue || [];
-            else if (ctx === 'search-tab') currentQueue = window.searchTabQueue || [];
-            else if (ctx === 'search-modal') { currentQueue = window.searchModalQueue || []; closeSearch(); }
+            else if (ctx === 'genre') currentQueue = Store.get('genreResults') || [];
+            else if (ctx === 'collection') currentQueue = Store.get('collectionResults') || [];
+            else if (ctx === 'search-tab') currentQueue = Store.get('searchTabResults') || [];
+            else if (ctx === 'search-modal') { currentQueue = Store.get('searchModalResults') || []; closeSearch(); }
             playTrack(i);
         }
 
@@ -1104,7 +1096,7 @@
             nextAudio = (nextAudio === audioA) ? audioB : audioA;
             prev.pause();
 
-            const streamUrl = `${API}/stream/${encodeURIComponent(t.id || '')}?source=${encodeURIComponent(t.source || '')}&url=${encodeURIComponent(t.stream_url || '')}&title=${encodeURIComponent(t.title || '')}&artist=${encodeURIComponent(t.artist || '')}`;
+            const streamUrl = Api.streamUrl(t);
 
             // Reuse preloaded buffer if possible
             if (activeAudio.src !== streamUrl) {
@@ -1132,7 +1124,7 @@
         function preloadNext() {
             const next = currentQueue[currentIndex + 1];
             if (!next) return;
-            const url = `${API}/stream/${encodeURIComponent(next.id || '')}?source=${encodeURIComponent(next.source || '')}&url=${encodeURIComponent(next.stream_url || '')}&title=${encodeURIComponent(next.title || '')}&artist=${encodeURIComponent(next.artist || '')}`;
+            const url = Api.streamUrl(next);
             nextAudio.src = url;
             nextAudio.preload = 'auto';
             try { nextAudio.load(); } catch (e) {}
@@ -1202,37 +1194,23 @@
             lastFeedbackSent = true;
             const t = currentQueue[currentIndex];
             if (!t) return;
-            try {
-                fetch(`${API}/wave/feedback`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        user_id: USER_ID,
-                        track_id: t.id,
-                        action: action,
-                        elapsed: Math.round((Date.now() - currentTrackStart) / 1000),
-                    }),
-                });
-            } catch (e) {}
+            Api.feedback({
+                user_id: Tg.USER_ID,
+                track_id: t.id,
+                action: action,
+                elapsed: Math.round((Date.now() - currentTrackStart) / 1000),
+            }).catch(() => {});  // полноценная очередь — Phase 2
         }
 
         function likeTrack(t) {
-            fetch(`${API}/library/like`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: USER_ID, track_id: t.id, track: t }),
-            }).catch(() => {});
+            Api.like(t).catch(() => {});
             if (currentIndex >= 0 && currentQueue[currentIndex] && currentQueue[currentIndex].id === t.id) {
                 document.getElementById('fp-fav-btn').innerText = '❤️';
             }
         }
 
         function dislikeTrack(t) {
-            fetch(`${API}/library/dislike`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ user_id: USER_ID, track_id: t.id }),
-            }).catch(() => {});
+            Api.dislike(t).catch(() => {});
         }
 
         function toggleCollectionCurrent() {
