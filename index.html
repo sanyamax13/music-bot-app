@@ -1232,6 +1232,374 @@
           return { mount, render, destroy };
         })();
 
+        // ===== Track-list delegation helper (shared by HomeScreen/SearchScreen/SearchModal/GenreScreen/LibraryScreen) =====
+        function attachTrackListDelegate(rootEl, getTracks, ctx) {
+          rootEl.onclick = (e) => {
+            const row = e.target.closest('[data-idx]');
+            if (!row) return;
+            const idx = parseInt(row.dataset.idx, 10);
+            const tracks = getTracks();
+            const t = tracks[idx];
+            if (!t) return;
+            const action = e.target.closest('[data-action]')?.dataset.action;
+            if (action === 'like')    { Api.like(t).catch(() => {}); return; }
+            if (action === 'dislike') { Api.dislike(t).catch(() => {}); return; }
+            if (action === 'play') {
+              if (ctx === 'wave') {
+                PlaybackEngine.playAt(idx);
+              } else if (ctx === 'search-modal') {
+                PlaybackEngine.playContext(ctx, tracks, idx);
+                document.getElementById('search-overlay').classList.remove('open');
+              } else {
+                PlaybackEngine.playContext(ctx, tracks, idx);
+              }
+            }
+          };
+        }
+
+        // ===== TrackCard — pure render function =====
+        const TrackCard = (() => {
+          function render(t, idx, ctx) {
+            const src = (t.source || '').toLowerCase();
+            const srcIcon = Config.SOURCE_ICONS[src] || '';
+            return `
+              <div class="track-item" data-idx="${idx}" data-ctx="${ctx}">
+                <img src="${Utils.escapeHtml(t.thumb || '')}" class="track-thumb" onerror="this.style.opacity=0.3">
+                <div class="track-info" data-action="play">
+                  <div class="track-title">${srcIcon ? `<span class="source-icon">${srcIcon}</span>` : ''}${Utils.escapeHtml(t.title || '')}</div>
+                  <div class="track-artist">${Utils.escapeHtml(t.artist || '')}</div>
+                </div>
+                <div class="track-actions">
+                  <div class="icon-btn" data-action="like">❤️</div>
+                  <div class="icon-btn" data-action="dislike">👎</div>
+                </div>
+              </div>
+            `;
+          }
+          return { render };
+        })();
+
+        // ===== MoodPicker (child of HomeScreen) =====
+        const MoodPicker = (() => {
+          let root;
+          async function load() {
+            try {
+              const d = await Api.waveMoods();
+              const moods = d.moods || [];
+              const cur = Store.get('waveMood');
+              root.innerHTML = `<div class="mood-card${cur === '' ? ' active' : ''}" data-mood="">✨ Все</div>` +
+                moods.map(m => {
+                  const id = m.id || m.name;
+                  return `<div class="mood-card${cur === id ? ' active' : ''}" data-mood="${Utils.escapeHtml(id)}"><span class="mood-emoji">${m.emoji || ''}</span>${Utils.escapeHtml(m.name)}</div>`;
+                }).join('');
+            } catch (e) { root.innerHTML = ''; }
+          }
+          function hydrate() {
+            root.onclick = (e) => {
+              const card = e.target.closest('[data-mood]');
+              if (!card) return;
+              Store.set({ waveMood: card.dataset.mood, waveEnded: false, queue: [] });
+              root.querySelectorAll('.mood-card').forEach(c => c.classList.remove('active'));
+              card.classList.add('active');
+              HomeScreen.reload();
+            };
+          }
+          function mount(el) { root = el; load().then(hydrate); }
+          function destroy() { if (root) root.innerHTML = ''; }
+          return { mount, destroy };
+        })();
+
+        // ===== HomeScreen (Wave tab) =====
+        const HomeScreen = (() => {
+          let root, listEl, loaderEl;
+
+          function ensureMarkup() {
+            listEl   = root.querySelector('#wave-list');
+            loaderEl = root.querySelector('#wave-loader');
+          }
+
+          async function loadWave(reset) {
+            if (Store.get('waveLoading') || Store.get('waveEnded')) return;
+            Store.set({ waveLoading: true });
+            if (loaderEl) loaderEl.style.display = 'block';
+            try {
+              const d = await Api.wave(Store.get('waveMood'));
+              const tracks = d.tracks || [];
+              if (!tracks.length) Store.set({ waveEnded: true });
+              const prevQueue = Store.get('queue');
+              const newQueue = reset ? tracks.slice() : prevQueue.concat(tracks);
+              Store.set({ queue: newQueue, playbackCtx: 'wave' });
+              if (reset) listEl.innerHTML = '';
+              const startIdx = reset ? 0 : (newQueue.length - tracks.length);
+              listEl.insertAdjacentHTML('beforeend',
+                tracks.map((t, i) => TrackCard.render(t, startIdx + i, 'wave')).join('')
+              );
+            } catch (e) {
+              listEl.insertAdjacentHTML('beforeend', '<p class="empty">Не удалось загрузить волну</p>');
+            }
+            Store.set({ waveLoading: false });
+            if (loaderEl) loaderEl.style.display = 'none';
+          }
+
+          function reload() {
+            Store.set({ queue: [], waveEnded: false });
+            if (listEl) listEl.innerHTML = '';
+            loadWave(true);
+          }
+
+          function mount(el) {
+            root = el;
+            ensureMarkup();
+            MoodPicker.mount(root.querySelector('#mood-scroll'));
+            attachTrackListDelegate(listEl, () => Store.get('queue'), 'wave');
+            const ca = document.getElementById('content-area');
+            ca.addEventListener('scroll', (e) => {
+              if (Store.get('screen') !== 'wave') return;
+              const el2 = e.target;
+              if (el2.scrollHeight - el2.scrollTop - el2.clientHeight < 500) loadWave(false);
+            });
+            loadWave(true);
+          }
+
+          function destroy() { /* Phase 1: mounted once */ }
+
+          return { mount, destroy, reload, loadWave };
+        })();
+
+        // ===== SourceChips (child of SearchScreen + SearchModal) =====
+        const SourceChips = (() => {
+          function mount(rootEl, storeKey, onChange) {
+            const active = Store.get(storeKey);
+            rootEl.innerHTML = Config.SOURCES.map(s =>
+              `<div class="chip${s.id === active ? ' active' : ''}" data-src="${s.id}">${Utils.escapeHtml(s.name)}</div>`
+            ).join('');
+            rootEl.onclick = (e) => {
+              const chip = e.target.closest('[data-src]');
+              if (!chip) return;
+              rootEl.querySelectorAll('.chip').forEach(c => c.classList.remove('active'));
+              chip.classList.add('active');
+              Store.set({ [storeKey]: chip.dataset.src });
+              onChange(chip.dataset.src);
+            };
+          }
+          return { mount };
+        })();
+
+        // ===== SearchScreen (Search tab) =====
+        const SearchScreen = (() => {
+          let root, inputEl, resultsEl, timer = null;
+
+          async function doSearch() {
+            const q = inputEl.value.trim();
+            if (!q) { resultsEl.innerHTML = '<p class="empty">Начните вводить запрос</p>'; return; }
+            resultsEl.innerHTML = '<p class="loading">Ищем…</p>';
+            try {
+              const d = await Api.search(q, Store.get('activeSource'));
+              const tracks = d.tracks || [];
+              Store.set({ searchTabResults: tracks });
+              resultsEl.innerHTML = tracks.length
+                ? tracks.map((t, i) => TrackCard.render(t, i, 'search-tab')).join('')
+                : '<p class="empty">Ничего не найдено</p>';
+            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка поиска</p>'; }
+          }
+
+          function mount(el) {
+            root = el;
+            inputEl   = root.querySelector('#search-tab-input');
+            resultsEl = root.querySelector('#search-tab-results');
+            SourceChips.mount(root.querySelector('#source-chips'), 'activeSource', () => doSearch());
+            inputEl.addEventListener('input', () => {
+              clearTimeout(timer);
+              timer = setTimeout(doSearch, 500);
+            });
+            attachTrackListDelegate(resultsEl, () => Store.get('searchTabResults') || [], 'search-tab');
+          }
+          function destroy() {}
+          return { mount, destroy };
+        })();
+
+        // ===== SearchModal (overlay search) =====
+        const SearchModal = (() => {
+          let root, inputEl, resultsEl, timer = null;
+          async function doSearch() {
+            const q = inputEl.value.trim();
+            if (!q) { resultsEl.innerHTML = '<p class="empty">Введите запрос для поиска</p>'; return; }
+            resultsEl.innerHTML = '<p class="loading">Ищем…</p>';
+            try {
+              const d = await Api.search(q, Store.get('activeModalSource'));
+              const tracks = d.tracks || [];
+              Store.set({ searchModalResults: tracks });
+              resultsEl.innerHTML = tracks.length
+                ? tracks.map((t, i) => TrackCard.render(t, i, 'search-modal')).join('')
+                : '<p class="empty">Ничего не найдено</p>';
+            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка поиска</p>'; }
+          }
+          function mount(el) {
+            root = el;
+            inputEl   = root.querySelector('#search-input');
+            resultsEl = root.querySelector('#search-results-list');
+            SourceChips.mount(root.querySelector('#modal-source-chips'), 'activeModalSource', () => doSearch());
+            inputEl.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(doSearch, 500); });
+            attachTrackListDelegate(resultsEl, () => Store.get('searchModalResults') || [], 'search-modal');
+            root.querySelector('.search-close').onclick = () => root.classList.remove('open');
+          }
+          function destroy() {}
+          function open() { root.classList.add('open'); setTimeout(() => inputEl.focus(), 200); }
+          return { mount, destroy, open };
+        })();
+
+        // ===== GenreScreen (Genres tab) =====
+        const GenreScreen = (() => {
+          let root, gridEl, resultsEl, listEl, titleEl;
+          function renderGrid() {
+            gridEl.innerHTML = Config.GENRES.map(g => `
+              <div class="genre-card" style="background:${g.grad}" data-genre="${Utils.escapeHtml(g.name)}">
+                <div class="g-emoji">${g.emoji}</div>
+                <div class="g-name">${Utils.escapeHtml(g.name)}</div>
+              </div>`).join('');
+          }
+          async function loadGenre(name) {
+            gridEl.style.display = 'none';
+            resultsEl.style.display = 'block';
+            titleEl.innerText = name;
+            listEl.innerHTML = '<p class="loading">Загружаем…</p>';
+            try {
+              const d = await Api.genre(name);
+              const tracks = d.tracks || [];
+              Store.set({ genreResults: tracks });
+              listEl.innerHTML = tracks.length
+                ? tracks.map((t, i) => TrackCard.render(t, i, 'genre')).join('')
+                : '<p class="empty">Пусто</p>';
+            } catch (e) { listEl.innerHTML = '<p class="empty">Ошибка загрузки</p>'; }
+          }
+          function mount(el) {
+            root = el;
+            gridEl    = root.querySelector('#genre-grid');
+            resultsEl = root.querySelector('#genre-results');
+            listEl    = root.querySelector('#genre-list');
+            titleEl   = root.querySelector('#genre-results-title');
+            renderGrid();
+            gridEl.onclick = (e) => {
+              const card = e.target.closest('[data-genre]');
+              if (card) loadGenre(card.dataset.genre);
+            };
+            root.querySelector('.back-btn').onclick = () => {
+              gridEl.style.display = 'grid';
+              resultsEl.style.display = 'none';
+            };
+            attachTrackListDelegate(listEl, () => Store.get('genreResults') || [], 'genre');
+          }
+          function destroy() {}
+          return { mount, destroy };
+        })();
+
+        // ===== LibraryScreen (Collection tab) =====
+        const LibraryScreen = (() => {
+          let root, resultsEl;
+          async function load() {
+            resultsEl.innerHTML = '<p class="loading">Загружаем лайки…</p>';
+            try {
+              const d = await Api.likes();
+              const tracks = d.tracks || [];
+              Store.set({ collectionResults: tracks });
+              resultsEl.innerHTML = tracks.length
+                ? tracks.map((t, i) => TrackCard.render(t, i, 'collection')).join('')
+                : '<p class="empty">Пока нет лайков</p>';
+            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка загрузки</p>'; }
+          }
+          function mount(el) {
+            root = el;
+            resultsEl = root.querySelector('#collection-results');
+            attachTrackListDelegate(resultsEl, () => Store.get('collectionResults') || [], 'collection');
+            Store.subscribe(['screen'], (state) => { if (state.screen === 'collection') load(); });
+          }
+          function destroy() {}
+          return { mount, destroy, reload: load };
+        })();
+
+        // ===== TasteBars (child of ProfileScreen) =====
+        const TasteBars = (() => {
+          let root, unsub;
+          function render() {
+            const taste = Store.get('taste');
+            if (!taste || !taste.length) {
+              root.innerHTML = '<p style="color:var(--text-muted); font-size:13px;">Слушайте больше, чтобы появился профиль</p>';
+              return;
+            }
+            const max = Math.max(...taste.map(t => t.weight || t.score || 0), 1);
+            root.innerHTML = taste.slice(0, 8).map(t => {
+              const w = t.weight || t.score || 0;
+              const pct = Math.round((w / max) * 100);
+              return `<div class="taste-row">
+                <div class="taste-label"><span>${Utils.escapeHtml(t.name || t.tag || '')}</span><span>${pct}%</span></div>
+                <div class="taste-bar"><div class="taste-fill" style="width:${pct}%"></div></div>
+              </div>`;
+            }).join('');
+          }
+          function mount(el) { root = el; unsub = Store.subscribe(['taste'], render); render(); }
+          function destroy() { if (unsub) unsub(); }
+          return { mount, destroy };
+        })();
+
+        // ===== ProfileScreen (Profile tab) =====
+        const ProfileScreen = (() => {
+          let root, statsEl, resetBtn;
+          async function load() {
+            try {
+              const [taste, stats] = await Promise.all([Api.taste(), Api.stats()]);
+              Store.set({ taste: taste.tags || [], stats });
+              renderStats(stats);
+            } catch (e) { /* TasteBars handles empty */ }
+          }
+          function renderStats(s) {
+            const items = [
+              { v: s.tracks_count  || s.tracks  || 0, l: 'Треков' },
+              { v: s.likes_count   || s.likes   || 0, l: 'Лайков' },
+              { v: s.listens_count || s.listens || 0, l: 'Прослушиваний' },
+              { v: s.artists_count || s.artists || 0, l: 'Артистов' },
+            ];
+            statsEl.innerHTML = items.map(i =>
+              `<div class="stat-box"><div class="stat-value">${i.v}</div><div class="stat-label">${Utils.escapeHtml(i.l)}</div></div>`
+            ).join('');
+          }
+          async function reset() {
+            // Phase 11 / PROF-4 will migrate to tg.showConfirm. Phase 1 keeps current window.confirm.
+            if (!confirm('Сбросить вкусовой профиль?')) return;
+            try { await Api.tasteReset(); load(); } catch (e) {}
+          }
+          function mount(el) {
+            root = el;
+            statsEl  = root.querySelector('#stat-grid');
+            resetBtn = root.querySelector('.btn-danger');
+            TasteBars.mount(root.querySelector('#taste-bars'));
+            if (resetBtn) resetBtn.onclick = reset;
+            Store.subscribe(['screen'], (state) => { if (state.screen === 'profile') load(); });
+          }
+          function destroy() {}
+          return { mount, destroy };
+        })();
+
+        // ===== BottomNav =====
+        const BottomNav = (() => {
+          let root, unsub;
+          function render() {
+            const s = Store.get('screen');
+            root.querySelectorAll('.nav-item').forEach(n => n.classList.toggle('active', n.dataset.tab === s));
+          }
+          function mount(el) {
+            root = el;
+            root.onclick = (e) => {
+              const item = e.target.closest('[data-tab]');
+              if (!item) return;
+              Router.go(item.dataset.tab, { push: false });
+            };
+            unsub = Store.subscribe(['screen'], render);
+            render();
+          }
+          function destroy() { if (unsub) unsub(); }
+          return { mount, destroy };
+        })();
+
         // ===== BOOT =====
         // (filled in Plan 08)
 
