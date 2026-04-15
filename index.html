@@ -992,7 +992,193 @@
         })();
 
         // ===== COMPONENTS =====
-        // (filled in Plans 06–07)
+
+        const MiniPlayer = (() => {
+          let root, unsubTrack, unsubPlaying;
+
+          function templateTrack(t) {
+            if (!t) return '';
+            return `
+              <img id="mp-thumb" src="${Utils.escapeHtml(t.thumb || '')}">
+              <div class="mp-info">
+                <div id="mp-title">${Utils.escapeHtml(t.title || '')}</div>
+                <div id="mp-artist">${Utils.escapeHtml(t.artist || '')}</div>
+              </div>
+              <div id="mp-play-btn" data-action="toggle">${Store.get('isPlaying') ? '⏸' : '▶'}</div>
+            `;
+          }
+
+          // Full re-render only on currentTrack change (rare event).
+          function renderTrack() {
+            const t = Store.get('currentTrack');
+            root.style.display = t ? 'flex' : 'none';
+            root.innerHTML = templateTrack(t);
+            hydrate();
+          }
+
+          // Surgical patch on isPlaying change — do NOT rewrite innerHTML.
+          function patchPlayIcon() {
+            const btn = root.querySelector('#mp-play-btn');
+            if (btn) btn.innerText = Store.get('isPlaying') ? '⏸' : '▶';
+          }
+
+          function hydrate() {
+            // Single delegated click on root: tap on play btn → toggle, tap elsewhere → expand FP.
+            // IMPORTANT: MiniPlayer does NOT write fullscreenOpen directly. It calls Router.openFullscreen()
+            // to keep Router as the single writer of that key (ARCH-1).
+            root.onclick = (e) => {
+              if (e.target.closest('[data-action="toggle"]')) {
+                e.stopPropagation();
+                PlaybackEngine.toggle();
+              } else {
+                Router.openFullscreen();
+              }
+            };
+          }
+
+          function mount(el) {
+            root = el;
+            unsubTrack   = Store.subscribe(['currentTrack'], renderTrack);
+            unsubPlaying = Store.subscribe(['isPlaying'],    patchPlayIcon);
+            renderTrack();
+            // Hairline progress is a Phase 4 (MINI-4) concern — not implemented here.
+          }
+
+          function destroy() {
+            if (unsubTrack)   unsubTrack();
+            if (unsubPlaying) unsubPlaying();
+            if (root) { root.innerHTML = ''; root.style.display = 'none'; }
+          }
+
+          return { mount, destroy };
+        })();
+
+        const FullscreenPlayer = (() => {
+          let root, rafId, unsubTrack, unsubDuration, unsubPlaying, unsubOpen;
+          let dragging = false;   // set while user is scrubbing #progress — rAF tick must not overwrite
+
+          // Full template is used ONLY on currentTrack change (rare).
+          // isPlaying and position updates NEVER rewrite innerHTML — they patch nodes surgically.
+          function templateTrack(t) {
+            t = t || {};
+            return `
+              <div class="fp-handle" data-action="close">▾</div>
+              <img id="fp-cover" src="${Utils.escapeHtml(t.thumb || '')}">
+              <div class="fp-meta">
+                <div class="track-info">
+                  <h2 id="fp-title">${Utils.escapeHtml(t.title || '')}</h2>
+                  <p id="fp-artist">${Utils.escapeHtml(t.artist || '')}</p>
+                </div>
+                <div id="fp-fav-btn" class="icon-btn" style="font-size:26px;" data-action="like">🤍</div>
+              </div>
+              <div class="fp-progress-wrap">
+                <input type="range" id="progress" value="0" min="0" max="100" step="0.1">
+                <div class="fp-time">
+                  <span id="fp-time-cur">0:00</span>
+                  <span id="fp-time-total">${Utils.fmtTime(Store.get('duration'))}</span>
+                </div>
+              </div>
+              <div class="fp-controls">
+                <div data-action="prev">⏮</div>
+                <div id="fp-play-btn" data-action="toggle">${Store.get('isPlaying') ? '⏸' : '▶'}</div>
+                <div data-action="next">⏭</div>
+              </div>
+              <div class="fp-feedback">
+                <div data-action="dislike">👎</div>
+                <div data-action="like-feedback">👍</div>
+              </div>
+            `;
+          }
+
+          function renderTrack() {
+            root.innerHTML = templateTrack(Store.get('currentTrack'));
+            hydrate();
+          }
+
+          // Surgical patches — do NOT rewrite innerHTML. This keeps #progress range
+          // focus/drag state, avoids flicker on pause/play, and is cheap on every
+          // isPlaying/duration/tick event.
+          function patchPlayIcon() {
+            const btn = root.querySelector('#fp-play-btn');
+            if (btn) btn.innerText = Store.get('isPlaying') ? '⏸' : '▶';
+          }
+          function patchDuration() {
+            const el = root.querySelector('#fp-time-total');
+            if (el) el.innerText = Utils.fmtTime(Store.get('duration'));
+          }
+
+          function hydrate() {
+            root.onclick = (e) => {
+              const action = e.target.closest('[data-action]')?.dataset.action;
+              if (!action) return;
+              switch (action) {
+                case 'close':         Router.closeFullscreen();             break;   // Router owns fullscreenOpen
+                case 'toggle':        PlaybackEngine.toggle();              break;
+                case 'prev':          PlaybackEngine.prev();                break;
+                case 'next':          PlaybackEngine.next();                break;
+                case 'dislike':       PlaybackEngine.sendManualFeedback('dislike'); break;
+                case 'like-feedback': PlaybackEngine.sendManualFeedback('like');    break;
+                case 'like':          {
+                  const t = Store.get('currentTrack');
+                  if (t) Api.like(t).catch(() => {});
+                  break;
+                }
+              }
+            };
+            // Range scrub — track drag state so rAF tick doesn't fight the user's finger.
+            const range = root.querySelector('#progress');
+            if (range) {
+              range.oninput       = () => PlaybackEngine.seekPct(parseFloat(range.value));
+              range.onpointerdown = () => { dragging = true; };
+              range.onpointerup   = () => { dragging = false; };
+              range.ontouchstart  = () => { dragging = true; };
+              range.ontouchend    = () => { dragging = false; };
+            }
+          }
+
+          function tickProgress() {
+            if (!Store.get('fullscreenOpen')) {
+              cancelAnimationFrame(rafId);
+              rafId = null;
+              return;
+            }
+            const cur  = root.querySelector('#fp-time-cur');
+            const prog = root.querySelector('#progress');
+            const pos  = PlaybackEngine.getPosition();
+            const dur  = PlaybackEngine.getDuration();
+            if (cur)  cur.innerText = Utils.fmtTime(pos);
+            if (prog && dur && !dragging) prog.value = (pos / dur) * 100;
+            rafId = requestAnimationFrame(tickProgress);
+          }
+
+          function syncOpen() {
+            const open = Store.get('fullscreenOpen');
+            root.classList.toggle('open', open);
+            if (open && !rafId) tickProgress();
+          }
+
+          function mount(el) {
+            root = el;
+            // Full re-render only on track change. isPlaying / duration patch in place.
+            unsubTrack    = Store.subscribe(['currentTrack'],    renderTrack);
+            unsubPlaying  = Store.subscribe(['isPlaying'],       patchPlayIcon);
+            unsubDuration = Store.subscribe(['duration'],        patchDuration);
+            unsubOpen     = Store.subscribe(['fullscreenOpen'],  syncOpen);
+            renderTrack();
+            syncOpen();
+          }
+
+          function destroy() {
+            cancelAnimationFrame(rafId);
+            if (unsubTrack)    unsubTrack();
+            if (unsubPlaying)  unsubPlaying();
+            if (unsubDuration) unsubDuration();
+            if (unsubOpen)     unsubOpen();
+            if (root) root.innerHTML = '';
+          }
+
+          return { mount, destroy };
+        })();
 
         // ===== BOOT =====
         // (filled in Plan 08)
@@ -1319,43 +1505,9 @@
             if (t) likeTrack(t);
         }
 
-        // === Temporary play/pause UI sync until MiniPlayer/FullscreenPlayer components land in Plan 06 ===
-        Store.subscribe(['isPlaying'], (state) => {
-            const txt = state.isPlaying ? '⏸' : '▶';
-            const mp = document.getElementById('mp-play-btn'); if (mp) mp.innerText = txt;
-            const fp = document.getElementById('fp-play-btn'); if (fp) fp.innerText = txt;
-        });
-
-        // === Temporary currentTrack UI sync (mini-player + fp meta) until Plan 06 ===
-        Store.subscribe(['currentTrack'], (state) => {
-            const t = state.currentTrack;
-            if (!t) return;
-            const mini = document.getElementById('mini-player');     if (mini) mini.style.display = 'flex';
-            const mpT  = document.getElementById('mp-title');        if (mpT)  mpT.innerText = t.title || '';
-            const mpA  = document.getElementById('mp-artist');       if (mpA)  mpA.innerText = t.artist || '';
-            const mpTh = document.getElementById('mp-thumb');        if (mpTh) mpTh.src = t.thumb || '';
-            const fpT  = document.getElementById('fp-title');        if (fpT)  fpT.innerText = t.title || '';
-            const fpA  = document.getElementById('fp-artist');       if (fpA)  fpA.innerText = t.artist || '';
-            const fpC  = document.getElementById('fp-cover');        if (fpC)  fpC.src = t.thumb || '';
-        });
-
-        // === Temporary duration → fp-time-total sync ===
-        Store.subscribe(['duration'], (state) => {
-            const el = document.getElementById('fp-time-total');
-            if (el) el.innerText = Utils.fmtTime(state.duration);
-        });
-
-        // === Temporary fp-time-cur and progress bar via rAF (read-through, not Store-driven) ===
-        (function tickFpProgress() {
-            const cur = document.getElementById('fp-time-cur');
-            const prog = document.getElementById('progress');
-            if (cur)  cur.innerText = Utils.fmtTime(PlaybackEngine.getPosition());
-            if (prog) {
-                const dur = PlaybackEngine.getDuration();
-                if (dur) prog.value = (PlaybackEngine.getPosition() / dur) * 100;
-            }
-            requestAnimationFrame(tickFpProgress);
-        })();
+        // === Plan 04 temporary UI-sync blocks (isPlaying/currentTrack/duration + tickFpProgress rAF)
+        // have been REMOVED in Plan 06. MiniPlayer and FullscreenPlayer IIFE components
+        // (defined in the COMPONENTS section above) own these subscriptions now. ===
 
         // === Screen visibility sync (will be replaced by component mount/unmount in Plan 07) ===
         Store.subscribe(['screen'], (state) => {
@@ -1380,6 +1532,10 @@
         });
 
         // ============ INIT ============
+        // Mount overlay components (Plan 06) — DOM is ready, Store + Router defined above.
+        MiniPlayer.mount(document.getElementById('mini-player'));
+        FullscreenPlayer.mount(document.getElementById('full-player'));
+
         renderGenres();
         setupSearchTab();
         setupSearchModal();
