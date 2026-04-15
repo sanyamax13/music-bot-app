@@ -710,7 +710,62 @@
         });
 
         // ===== API =====
-        // (filled in Plan 03)
+        // Single bridge between frontend and https://api.vdsmusic.ru:8443.
+        // See ARCHITECTURE.md §6. Methods map 1:1 to backend endpoints.
+        // Dedup: identical in-flight requests share one Promise.
+        // Error envelope: non-2xx responses throw Error with HTTP status.
+        // Retry/backoff is intentionally NOT here (Phase 2 / AUDIO-6).
+        const Api = (() => {
+          const base = Config.API;
+          const inflight = new Map();
+
+          function key(method, path, body) {
+            return `${method} ${path} ${body ? JSON.stringify(body) : ''}`;
+          }
+
+          async function req(path, opts = {}) {
+            const method = opts.method || 'GET';
+            const k = key(method, path, opts.body);
+            if (inflight.has(k)) return inflight.get(k);
+            const p = (async () => {
+              const r = await fetch(base + path, {
+                method,
+                headers: opts.body ? { 'Content-Type': 'application/json' } : undefined,
+                body: opts.body ? JSON.stringify(opts.body) : undefined,
+              });
+              if (!r.ok) throw new Error(`HTTP ${r.status} on ${method} ${path}`);
+              return await r.json();
+            })();
+            inflight.set(k, p);
+            p.finally(() => inflight.delete(k));
+            return p;
+          }
+
+          // streamUrl is NOT a fetch — it's URL construction for <audio>.src
+          function streamUrl(t) {
+            const id = encodeURIComponent(t.id || '');
+            const source = encodeURIComponent(t.source || '');
+            const url = encodeURIComponent(t.stream_url || '');
+            const title = encodeURIComponent(t.title || '');
+            const artist = encodeURIComponent(t.artist || '');
+            return `${base}/stream/${id}?source=${source}&url=${url}&title=${title}&artist=${artist}`;
+          }
+
+          return {
+            wave:       (mood)        => req(`/wave?user_id=${Tg.USER_ID}&mood=${encodeURIComponent(mood || '')}`),
+            waveMoods:  ()            => req(`/wave/moods?user_id=${Tg.USER_ID}`),
+            search:     (q, src)      => req(`/search?q=${encodeURIComponent(q)}${src && src !== 'all' ? `&sources=${src}` : ''}&user_id=${Tg.USER_ID}`),
+            genre:      (name)        => req(`/genre?q=${encodeURIComponent(name)}&user_id=${Tg.USER_ID}`),
+            likes:      ()            => req(`/library/likes?user_id=${Tg.USER_ID}`),
+            stats:      ()            => req(`/library/stats?user_id=${Tg.USER_ID}`),
+            taste:      ()            => req(`/taste/${Tg.USER_ID}`),
+            tasteReset: ()            => req(`/taste/reset?user_id=${Tg.USER_ID}`, { method: 'POST' }),
+            like:       (t)           => req(`/library/like`,    { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id, track: t } }),
+            dislike:    (t)           => req(`/library/dislike`, { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id } }),
+            feedback:   (ev)          => req(`/wave/feedback`,   { method: 'POST', body: ev }),
+            streamUrl,
+          };
+        })();
 
         // ===== PLAYBACK ENGINE =====
         // (filled in Plan 04)
