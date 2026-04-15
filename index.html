@@ -947,16 +947,10 @@
         // ===== BOOT =====
         // (filled in Plan 08)
 
-        // Audio dual-buffer
-        const audioA = document.getElementById('audioA');
-        const audioB = document.getElementById('audioB');
-        let activeAudio = audioA, nextAudio = audioB;
-
-        // Queues — currentQueue/currentIndex/currentCtx/waveMood/waveLoading/waveEnded
-        // now live in Store (see STORE section above) and are exposed via window.* shims.
-        // These two remain here — internal PlaybackEngine state, migrated in Plan 04:
-        let currentTrackStart = 0, lastFeedbackSent = false;
-        // activeSource / activeModalSource also moved to Store via window.* shims.
+        // Audio dual-buffer + feedback bookkeeping moved into PlaybackEngine IIFE (Plan 04).
+        // currentQueue/currentIndex/currentCtx/waveMood/waveLoading/waveEnded live in Store
+        // and are exposed via window.* shims (defined above).
+        // activeSource / activeModalSource also live in Store via window.* shims.
 
         // ============ TABS ============
         function switchTab(tab, el) {
@@ -1229,148 +1223,44 @@
             </div>`;
         }
 
+        // ============ PLAYER — thin delegates to PlaybackEngine ============
+        // These globals exist only because HTML markup still uses inline onclick=.
+        // Plans 06–07 will replace inline handlers with component-bound listeners and
+        // these can then be deleted.
+
         function playFromContext(i, ctx) {
-            currentCtx = ctx;
-            if (ctx === 'wave') { /* wave uses currentQueue already */ }
-            else if (ctx === 'genre') currentQueue = Store.get('genreResults') || [];
-            else if (ctx === 'collection') currentQueue = Store.get('collectionResults') || [];
-            else if (ctx === 'search-tab') currentQueue = Store.get('searchTabResults') || [];
-            else if (ctx === 'search-modal') { currentQueue = Store.get('searchModalResults') || []; closeSearch(); }
-            playTrack(i);
-        }
-
-        // ============ PLAYER ============
-        async function playTrack(i) {
-            if (i < 0 || i >= currentQueue.length) return;
-            currentIndex = i;
-            const t = currentQueue[i];
-
-            document.getElementById('mini-player').style.display = 'flex';
-            document.getElementById('mp-title').innerText = t.title || '';
-            document.getElementById('mp-artist').innerText = t.artist || '';
-            document.getElementById('mp-thumb').src = t.thumb || '';
-            document.getElementById('fp-title').innerText = t.title || '';
-            document.getElementById('fp-artist').innerText = t.artist || '';
-            document.getElementById('fp-cover').src = t.thumb || '';
-
-            currentTrackStart = Date.now();
-            lastFeedbackSent = false;
-
-            // Swap buffers
-            const prev = activeAudio;
-            activeAudio = (activeAudio === audioA) ? audioB : audioA;
-            nextAudio = (nextAudio === audioA) ? audioB : audioA;
-            prev.pause();
-
-            const streamUrl = Api.streamUrl(t);
-
-            // Reuse preloaded buffer if possible
-            if (activeAudio.src !== streamUrl) {
-                activeAudio.src = streamUrl;
+            let tracks;
+            switch (ctx) {
+                case 'wave':         tracks = Store.get('queue'); break;        // wave queue already lives in Store from loadWave()
+                case 'genre':        tracks = Store.get('genreResults') || []; break;
+                case 'collection':   tracks = Store.get('collectionResults') || []; break;
+                case 'search-tab':   tracks = Store.get('searchTabResults') || []; break;
+                case 'search-modal': tracks = Store.get('searchModalResults') || []; closeSearch(); break;
+                default:             tracks = []; break;
             }
-
-            activeAudio.ontimeupdate = onTimeUpdate;
-            activeAudio.onended = onTrackEnded;
-            activeAudio.onloadedmetadata = () => {
-                document.getElementById('fp-time-total').innerText = fmtTime(activeAudio.duration);
-            };
-
-            setupMediaSession(t);
-
-            try {
-                await activeAudio.play();
-                updatePlayUI(true);
-                preloadNext();
-                autoExtendWave();
-            } catch (e) {
-                updatePlayUI(false);
+            if (ctx === 'wave') {
+                PlaybackEngine.playAt(i);
+            } else {
+                PlaybackEngine.playContext(ctx, tracks, i);
             }
         }
 
-        function preloadNext() {
-            const next = currentQueue[currentIndex + 1];
-            if (!next) return;
-            const url = Api.streamUrl(next);
-            nextAudio.src = url;
-            nextAudio.preload = 'auto';
-            try { nextAudio.load(); } catch (e) {}
-        }
+        function togglePlay() { PlaybackEngine.toggle(); }
+        function skipNext()   { PlaybackEngine.next(); }
+        function playPrev()   { PlaybackEngine.prev(); }
+        function seekAudio(v) { PlaybackEngine.seekPct(parseFloat(v)); }
 
-        function autoExtendWave() {
-            if (currentCtx !== 'wave') return;
-            if (currentIndex >= currentQueue.length - 3) {
-                loadWave(false);
-            }
-        }
-
-        function onTimeUpdate() {
-            if (!activeAudio.duration) return;
-            const pct = (activeAudio.currentTime / activeAudio.duration) * 100;
-            document.getElementById('progress').value = pct;
-            document.getElementById('fp-time-cur').innerText = fmtTime(activeAudio.currentTime);
-        }
-
-        function onTrackEnded() {
-            sendFeedback('finish');
-            playTrack(currentIndex + 1);
-        }
-
-        function skipNext() {
-            sendFeedback('skip');
-            playTrack(currentIndex + 1);
-        }
-
-        function playPrev() { playTrack(currentIndex - 1); }
-
-        function togglePlay() {
-            if (!activeAudio.src) return;
-            if (activeAudio.paused) { activeAudio.play(); updatePlayUI(true); }
-            else { activeAudio.pause(); updatePlayUI(false); }
-        }
-
-        function updatePlayUI(playing) {
-            document.getElementById('mp-play-btn').innerText = playing ? '⏸' : '▶';
-            document.getElementById('fp-play-btn').innerText = playing ? '⏸' : '▶';
-        }
-
-        function seekAudio(v) {
-            if (!activeAudio.duration) return;
-            activeAudio.currentTime = (v / 100) * activeAudio.duration;
-        }
+        // Legacy global for inline onclick handlers in FP markup (👎 / 👍)
+        function sendFeedback(action) { PlaybackEngine.sendManualFeedback(action); }
 
         function openFullPlayer() { document.getElementById('full-player').classList.add('open'); }
         function closeFullPlayer() { document.getElementById('full-player').classList.remove('open'); }
 
-        function setupMediaSession(t) {
-            if (!('mediaSession' in navigator)) return;
-            navigator.mediaSession.metadata = new MediaMetadata({
-                title: t.title || '',
-                artist: t.artist || '',
-                artwork: t.thumb ? [{ src: t.thumb, sizes: '512x512', type: 'image/jpeg' }] : [],
-            });
-            navigator.mediaSession.setActionHandler('play', togglePlay);
-            navigator.mediaSession.setActionHandler('pause', togglePlay);
-            navigator.mediaSession.setActionHandler('previoustrack', playPrev);
-            navigator.mediaSession.setActionHandler('nexttrack', skipNext);
-        }
-
-        // ============ FEEDBACK ============
-        function sendFeedback(action) {
-            if (lastFeedbackSent || currentIndex < 0) return;
-            lastFeedbackSent = true;
-            const t = currentQueue[currentIndex];
-            if (!t) return;
-            Api.feedback({
-                user_id: Tg.USER_ID,
-                track_id: t.id,
-                action: action,
-                elapsed: Math.round((Date.now() - currentTrackStart) / 1000),
-            }).catch(() => {});  // полноценная очередь — Phase 2
-        }
-
         function likeTrack(t) {
             Api.like(t).catch(() => {});
-            if (currentIndex >= 0 && currentQueue[currentIndex] && currentQueue[currentIndex].id === t.id) {
+            const idx = Store.get('queueIndex');
+            const cur = idx >= 0 ? Store.get('queue')[idx] : null;
+            if (cur && cur.id === t.id) {
                 document.getElementById('fp-fav-btn').innerText = '❤️';
             }
         }
@@ -1380,10 +1270,49 @@
         }
 
         function toggleCollectionCurrent() {
-            if (currentIndex < 0) return;
-            const t = currentQueue[currentIndex];
-            likeTrack(t);
+            const idx = Store.get('queueIndex');
+            if (idx < 0) return;
+            const t = Store.get('queue')[idx];
+            if (t) likeTrack(t);
         }
+
+        // === Temporary play/pause UI sync until MiniPlayer/FullscreenPlayer components land in Plan 06 ===
+        Store.subscribe(['isPlaying'], (state) => {
+            const txt = state.isPlaying ? '⏸' : '▶';
+            const mp = document.getElementById('mp-play-btn'); if (mp) mp.innerText = txt;
+            const fp = document.getElementById('fp-play-btn'); if (fp) fp.innerText = txt;
+        });
+
+        // === Temporary currentTrack UI sync (mini-player + fp meta) until Plan 06 ===
+        Store.subscribe(['currentTrack'], (state) => {
+            const t = state.currentTrack;
+            if (!t) return;
+            const mini = document.getElementById('mini-player');     if (mini) mini.style.display = 'flex';
+            const mpT  = document.getElementById('mp-title');        if (mpT)  mpT.innerText = t.title || '';
+            const mpA  = document.getElementById('mp-artist');       if (mpA)  mpA.innerText = t.artist || '';
+            const mpTh = document.getElementById('mp-thumb');        if (mpTh) mpTh.src = t.thumb || '';
+            const fpT  = document.getElementById('fp-title');        if (fpT)  fpT.innerText = t.title || '';
+            const fpA  = document.getElementById('fp-artist');       if (fpA)  fpA.innerText = t.artist || '';
+            const fpC  = document.getElementById('fp-cover');        if (fpC)  fpC.src = t.thumb || '';
+        });
+
+        // === Temporary duration → fp-time-total sync ===
+        Store.subscribe(['duration'], (state) => {
+            const el = document.getElementById('fp-time-total');
+            if (el) el.innerText = Utils.fmtTime(state.duration);
+        });
+
+        // === Temporary fp-time-cur and progress bar via rAF (read-through, not Store-driven) ===
+        (function tickFpProgress() {
+            const cur = document.getElementById('fp-time-cur');
+            const prog = document.getElementById('progress');
+            if (cur)  cur.innerText = Utils.fmtTime(PlaybackEngine.getPosition());
+            if (prog) {
+                const dur = PlaybackEngine.getDuration();
+                if (dur) prog.value = (PlaybackEngine.getPosition() / dur) * 100;
+            }
+            requestAnimationFrame(tickFpProgress);
+        })();
 
         // ============ INIT ============
         renderGenres();
