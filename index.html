@@ -496,6 +496,43 @@
     </div>
 
     <script>
+        // =====================================================================
+        // VDS Music — single-file modular layout (Phase 1 refactor)
+        // Sections must appear in this order — every module below Store may
+        // reference Store; PlaybackEngine must be defined before any component.
+        // See .planning/research/ARCHITECTURE.md §1.
+        // =====================================================================
+
+        // ===== CONFIG =====
+        // (filled in Plan 01)
+
+        // ===== UTILS =====
+        // (filled in Plan 01)
+
+        // ===== TELEGRAM =====
+        // (filled in Plan 01)
+
+        // ===== STORE =====
+        // (filled in Plan 02)
+
+        // ===== API =====
+        // (filled in Plan 03)
+
+        // ===== PLAYBACK ENGINE =====
+        // (filled in Plan 04)
+
+        // ===== FEEDBACK =====
+        // (filled in Plan 04 — minimal stub; full queue is Phase 2)
+
+        // ===== ROUTER =====
+        // (filled in Plan 05)
+
+        // ===== COMPONENTS =====
+        // (filled in Plans 06–07)
+
+        // ===== BOOT =====
+        // (filled in Plan 08)
+
         const API = "https://api.vdsmusic.ru:8443";
 
         const tg = window.Telegram.WebApp;
