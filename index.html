@@ -578,7 +578,136 @@
         const escapeAttr = Utils.escapeAttr;
 
         // ===== STORE =====
-        // (filled in Plan 02)
+        // Single source of truth for app state. See ARCHITECTURE.md §2.
+        // Exactly one module owns each key (enforced by convention — see owner comments).
+        const Store = (() => {
+          const state = {
+            // ===== Playback (owner: PlaybackEngine — Plan 04) =====
+            currentTrack: null,
+            isPlaying: false,
+            duration: 0,
+            playbackCtx: 'wave',           // 'wave' | 'genre' | 'search-tab' | 'search-modal' | 'collection'
+
+            // ===== Queue (owner: PlaybackEngine — Plan 04) =====
+            queue: [],
+            queueIndex: -1,
+            userQueue: [],                 // explicit "play next" — wired in Phase 6
+            history: [],                   // for prev — wired in Phase 6
+
+            // ===== Wave-specific (owner: HomeScreen — Plan 07; read by PlaybackEngine for auto-extend) =====
+            waveMood: '',
+            waveLoading: false,
+            waveEnded: false,
+
+            // ===== UI (owner: Router — Plan 05) =====
+            screen: 'wave',                // 'wave' | 'search' | 'genres' | 'collection' | 'profile'
+            fullscreenOpen: false,
+            queuePanelOpen: false,         // Phase 6 will use this
+
+            // ===== Search (owner: SearchScreen — Plan 07) =====
+            activeSource: 'all',
+            activeModalSource: 'all',
+            searchTabResults: [],
+            searchModalResults: [],
+
+            // ===== Genre (owner: HomeScreen/GenreScreen — Plan 07) =====
+            genreResults: [],
+
+            // ===== Collection (owner: LibraryScreen — Plan 07) =====
+            collectionResults: [],
+
+            // ===== Per-user (owner: Boot/Api — Plan 08) =====
+            userId: 0,
+            likedIds: new Set(),
+            taste: null,
+            stats: null,
+          };
+
+          const subs = new Map();          // key -> Set<fn>
+
+          function get(key) { return state[key]; }
+
+          function set(patch) {
+            const changedKeys = [];
+            for (const k of Object.keys(patch)) {
+              if (state[k] !== patch[k]) {
+                state[k] = patch[k];
+                changedKeys.push(k);
+              }
+            }
+            if (changedKeys.length) notify(changedKeys);
+          }
+
+          function subscribe(keys, fn) {
+            for (const k of keys) {
+              if (!subs.has(k)) subs.set(k, new Set());
+              subs.get(k).add(fn);
+            }
+            // return an unsubscribe function
+            return () => { for (const k of keys) subs.get(k)?.delete(fn); };
+          }
+
+          function notify(changedKeys) {
+            const called = new Set();
+            for (const k of changedKeys) {
+              const set = subs.get(k);
+              if (!set) continue;
+              for (const fn of set) {
+                if (called.has(fn)) continue;
+                called.add(fn);
+                try { fn(state); } catch (e) { console.error('[Store] subscriber error', e); }
+              }
+            }
+          }
+
+          return { get, set, subscribe, _state: state };  // _state exposed only for debugging
+        })();
+
+        // === LEGACY shims for Plans 02→04 — these will be removed in Plan 04 (PlaybackEngine takeover) ===
+        // Each shim is a getter/setter pair on window so old `currentQueue = tracks` style writes
+        // and `currentQueue.length` reads keep working while the actual store is Store._state.
+        // NOTE: only REASSIGNMENT flows through Store; in-place mutation (.push, .splice, arr[i]=)
+        // bypasses the setter. The pre-refactor code uses reassignment everywhere — don't add in-place mutations.
+        Object.defineProperty(window, 'currentQueue', {
+          get: () => Store.get('queue'),
+          set: (v) => Store.set({ queue: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'currentIndex', {
+          get: () => Store.get('queueIndex'),
+          set: (v) => Store.set({ queueIndex: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'currentCtx', {
+          get: () => Store.get('playbackCtx'),
+          set: (v) => Store.set({ playbackCtx: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'waveMood', {
+          get: () => Store.get('waveMood'),
+          set: (v) => Store.set({ waveMood: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'waveLoading', {
+          get: () => Store.get('waveLoading'),
+          set: (v) => Store.set({ waveLoading: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'waveEnded', {
+          get: () => Store.get('waveEnded'),
+          set: (v) => Store.set({ waveEnded: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'activeSource', {
+          get: () => Store.get('activeSource'),
+          set: (v) => Store.set({ activeSource: v }),
+          configurable: true,
+        });
+        Object.defineProperty(window, 'activeModalSource', {
+          get: () => Store.get('activeModalSource'),
+          set: (v) => Store.set({ activeModalSource: v }),
+          configurable: true,
+        });
 
         // ===== API =====
         // (filled in Plan 03)
