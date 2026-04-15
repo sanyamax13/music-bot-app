@@ -939,7 +939,57 @@
         })();
 
         // ===== ROUTER =====
-        // (filled in Plan 05)
+        // Router IIFE — state machine for screens + overlay flag mutators.
+        // Router is the SOLE writer of Store keys: screen, fullscreenOpen, queuePanelOpen.
+        // BackButton precedence (ARCHITECTURE.md §3): queuePanelOpen → fullscreenOpen → stack → tg.close().
+        const Router = (() => {
+          const stack = [];
+
+          function go(screen, opts = {}) {
+            const prev = Store.get('screen');
+            if (opts.push !== false && prev !== screen) stack.push(prev);
+            Store.set({ screen });
+            updateBackButton();
+          }
+
+          function back() {
+            // Precedence order (must NOT change without updating ARCHITECTURE.md §3):
+            //   1. queuePanelOpen → close queue panel
+            //   2. fullscreenOpen → close fullscreen
+            //   3. stack non-empty → pop screen
+            //   4. otherwise → tg.close()
+            if (Store.get('queuePanelOpen')) { Store.set({ queuePanelOpen: false }); return; }
+            if (Store.get('fullscreenOpen')) { Store.set({ fullscreenOpen: false }); return; }
+            if (stack.length) { Store.set({ screen: stack.pop() }); updateBackButton(); return; }
+            Tg.tg.close();
+          }
+
+          function updateBackButton() {
+            const canGoBack =
+                 Store.get('fullscreenOpen')
+              || Store.get('queuePanelOpen')
+              || stack.length > 0;
+            if (canGoBack) Tg.tg.BackButton.show();
+            else           Tg.tg.BackButton.hide();
+          }
+
+          // === Overlay mutators — Router is the ONLY writer of fullscreenOpen / queuePanelOpen ===
+          // Components (MiniPlayer, FullscreenPlayer, QueuePanel) MUST call these instead of
+          // writing Store.set({ fullscreenOpen: ... }) directly. This enforces ARCH-1
+          // "exactly one module writes each key" for the overlay flags.
+          function openFullscreen()  { Store.set({ fullscreenOpen: true });  }
+          function closeFullscreen() { Store.set({ fullscreenOpen: false }); }
+          function openQueuePanel()  { Store.set({ queuePanelOpen: true });  }
+          function closeQueuePanel() { Store.set({ queuePanelOpen: false }); }
+
+          // Wire BackButton once
+          Tg.tg.BackButton.onClick(back);
+
+          // React to overlay flag changes from other modules
+          Store.subscribe(['fullscreenOpen', 'queuePanelOpen'], updateBackButton);
+
+          return { go, back, updateBackButton, openFullscreen, closeFullscreen, openQueuePanel, closeQueuePanel };
+        })();
 
         // ===== COMPONENTS =====
         // (filled in Plans 06–07)
