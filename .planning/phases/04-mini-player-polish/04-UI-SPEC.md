@@ -1,7 +1,7 @@
 ---
 phase: 4
 slug: mini-player-polish
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-04-16
@@ -21,7 +21,7 @@ created: 2026-04-16
 | Preset | not applicable |
 | Component library | none (vanilla IIFE components) |
 | Icon library | Emoji glyphs (Unicode) — project convention |
-| Font | Inter (400, 500, 600, 700, 800 via Google Fonts CDN) |
+| Font | Inter (400, 600 — weights used by this phase) |
 
 ---
 
@@ -32,13 +32,11 @@ Declared values (must be multiples of 4):
 | Token | Value | Usage |
 |-------|-------|-------|
 | xs | 4px | Icon gaps, inline padding |
-| sm | 8px | Mini-player vertical padding |
-| md | 12px | Mini-player horizontal padding, thumb margin-right |
-| lg | 16px | Border-radius (--radius) |
-| xl | 24px | Content area padding |
-| 2xl | 44px | Touch target minimum (WCAG) |
+| sm | 8px | Mini-player vertical padding, thumb margin-right |
+| md | 16px | Mini-player horizontal padding, border-radius |
+| lg | 24px | Content area padding |
 
-Exceptions: Touch targets for heart-button and play-button must be at least 44x44px (CSS tap area via padding, not visual size).
+Touch target constraints (not spacing tokens): heart-button and play-button must be at least 44x44px tap area (WCAG). Achieved via padding on the element, not a spacing scale value.
 
 ---
 
@@ -75,6 +73,12 @@ Heart states:
 
 ---
 
+## Visual Hierarchy
+
+Primary visual anchor: `#mp-play-btn` — accent-colored emoji draws the eye as the single primary action.
+
+---
+
 ## Component Inventory
 
 ### Modified: MiniPlayer template
@@ -102,7 +106,7 @@ New DOM order: `thumb -> info -> heart-btn -> play-btn -> progress`
 | Content empty | `\ud83e\udd0d` |
 | Content filled | `\u2764\ufe0f` |
 | Font size | 26px (matches play-button) |
-| Padding | 6px (results in ~38px visual, 44px with tap area) |
+| Padding | 8px (results in ~42px visual, meets 44px tap area) |
 | Min tap target | 44x44px (use padding to achieve) |
 | Cursor | pointer |
 | Transition | transform 0.15s ease-out on tap (:active scale(1.2)) |
@@ -213,11 +217,11 @@ No component registries. Project uses vanilla CSS + JS with no build tools (ARCH
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS (focal point added)
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS (weights restricted to 400, 600)
+- [x] Dimension 5 Spacing: PASS (12px→16px, 44px moved to touch constraints)
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved (revision 1 — fixed typography weights + spacing scale)
