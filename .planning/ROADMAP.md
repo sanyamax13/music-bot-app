@@ -112,6 +112,12 @@ Plans:
 - Визуальное сравнение со скринами Яндекс/Spotify — паритет P1-пунктов
 **Est:** L
 
+**Plans:** 2 plans
+
+Plans:
+- [ ] 05-01-PLAN.md — CSS + template foundation (cover resize, scrubber touch-target, heart overlay, queue-peek, artist tap)
+- [ ] 05-02-PLAN.md — JS behavior (double-tap like, queue-peek subscription, artist tap-to-search, SearchScreen API)
+
 ## Phase 6: Queue Bottom Sheet
 
 **Goal:** Просмотр и управление очередью с drag-to-reorder.
