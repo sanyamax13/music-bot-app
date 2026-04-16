@@ -631,7 +631,8 @@
             genre:      (name)        => req(`/genre?q=${encodeURIComponent(name)}&user_id=${Tg.USER_ID}`),
             stats:      ()            => req(`/library/stats`),
             taste:      ()            => req(`/taste/${Tg.USER_ID}`),
-            like:       (t)           => req(`/like`, { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id, track: t } }),
+            likes:      ()            => req(`/library/likes?user_id=${Tg.USER_ID}`),
+            like:       (t)           => req(`/like`, { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id, is_like: true, track: t } }),
             feedback:   (ev)          => req(`/wave/feedback`,   { method: 'POST', body: ev }),
             streamUrl,
           };
@@ -1331,18 +1332,27 @@
         })();
 
         // ===== LibraryScreen (Collection tab) =====
-        // Note: /library/likes endpoint does not exist yet on backend.
-        // Showing placeholder until API is available.
         const LibraryScreen = (() => {
           let root, resultsEl;
+          async function load() {
+            resultsEl.innerHTML = '<p class="loading">Загружаем лайки…</p>';
+            try {
+              const d = await Api.likes();
+              const tracks = d.tracks || [];
+              Store.set({ collectionResults: tracks });
+              resultsEl.innerHTML = tracks.length
+                ? tracks.map((t, i) => TrackCard.render(t, i, 'collection')).join('')
+                : '<p class="empty">Пока нет лайков</p>';
+            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка загрузки</p>'; }
+          }
           function mount(el) {
             root = el;
             resultsEl = root.querySelector('#collection-results');
-            resultsEl.innerHTML = '<p class="empty">Скоро здесь появятся ваши лайки ❤️</p>';
+            attachTrackListDelegate(resultsEl, () => Store.get('collectionResults') || [], 'collection');
+            Store.subscribe(['screen'], (state) => { if (state.screen === 'collection') load(); });
           }
           function destroy() {}
-          function reload() {}
-          return { mount, destroy, reload };
+          return { mount, destroy, reload: load };
         })();
 
         // ===== TasteBars (child of ProfileScreen) =====
