@@ -340,9 +340,11 @@
         }
         .fp-feedback div { cursor: pointer; padding: 6px 12px; }
         .fp-volume {
-            display: flex; align-items: center; gap: 10px;
+            display: none; /* hidden on mobile — audio.volume not supported */
+            align-items: center; gap: 10px;
             margin-top: 10px; padding: 0 8px;
         }
+        @media (pointer: fine) { .fp-volume { display: flex; } } /* show only on desktop (mouse) */
         .fp-volume .vol-icon { font-size: 18px; cursor: pointer; user-select: none; min-width: 24px; text-align: center; }
         .fp-volume input[type=range] { flex: 1; height: 16px; }
         .fp-volume input[type=range]::-webkit-slider-runnable-track { height: 3px; background: #444; }
