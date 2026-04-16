@@ -227,20 +227,7 @@
             font-family: inherit;
         }
 
-        /* FAB */
-        .fab {
-            position: fixed;
-            bottom: calc(110px + env(safe-area-inset-bottom));
-            right: 18px;
-            width: 56px; height: 56px;
-            background: var(--accent);
-            border-radius: 50%;
-            display: flex; align-items: center; justify-content: center;
-            font-size: 24px;
-            z-index: 90;
-            box-shadow: 0 10px 28px rgba(255,51,102,0.45);
-            cursor: pointer;
-        }
+        /* FAB — removed (dedicated Search tab exists) */
 
         /* Mini player */
         #mini-player {
@@ -280,33 +267,35 @@
             background: var(--bg);
             transition: top 0.4s cubic-bezier(0.33, 1, 0.68, 1);
             z-index: 2000;
-            padding: 30px 24px calc(40px + env(safe-area-inset-bottom));
+            padding: 20px 24px calc(20px + env(safe-area-inset-bottom));
             display: flex; flex-direction: column;
+            overflow-y: auto;
         }
         #full-player.open { top: 0; }
         .fp-handle {
             font-size: 28px; color: #555;
-            text-align: center; margin-bottom: 16px;
+            text-align: center; margin-bottom: 8px;
             cursor: pointer;
         }
         #fp-cover {
-            width: 100%;
+            width: 60vw;
+            max-width: 280px;
             aspect-ratio: 1/1;
-            max-width: 360px;
             margin: 0 auto;
             border-radius: 24px;
             object-fit: cover;
             background: var(--surface);
             box-shadow: 0 24px 48px rgba(0,0,0,0.6);
+            flex-shrink: 0;
         }
         .fp-meta {
-            margin-top: 28px;
+            margin-top: 16px;
             display: flex; align-items: center; gap: 12px;
         }
         .fp-meta .track-info { flex: 1; }
         #fp-title { font-size: 22px; font-weight: 800; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
         #fp-artist { font-size: 15px; color: var(--text-muted); margin: 4px 0 0; }
-        .fp-progress-wrap { margin-top: 22px; }
+        .fp-progress-wrap { margin-top: 14px; }
         input[type=range] {
             width: 100%;
             -webkit-appearance: none;
@@ -332,7 +321,7 @@
         }
         .fp-controls {
             display: flex; justify-content: center; align-items: center;
-            gap: 28px; margin-top: 28px;
+            gap: 28px; margin-top: 16px;
             font-size: 38px;
         }
         .fp-controls div { cursor: pointer; user-select: none; }
@@ -346,35 +335,12 @@
         }
         .fp-feedback {
             display: flex; justify-content: center;
-            gap: 40px; margin-top: 24px;
+            gap: 40px; margin-top: 14px;
             font-size: 28px;
         }
         .fp-feedback div { cursor: pointer; padding: 6px 12px; }
 
-        /* Search overlay */
-        #search-overlay {
-            position: fixed;
-            top: 100%; left: 0;
-            width: 100%; height: 100%;
-            background: rgba(15,15,19,0.97);
-            backdrop-filter: blur(14px);
-            -webkit-backdrop-filter: blur(14px);
-            z-index: 3000;
-            transition: top 0.3s;
-            padding: 24px 18px calc(30px + env(safe-area-inset-bottom));
-            display: flex; flex-direction: column;
-        }
-        #search-overlay.open { top: 0; }
-        .search-head { display: flex; align-items: center; gap: 12px; }
-        .search-close {
-            font-size: 26px; color: #888;
-            cursor: pointer; padding: 4px;
-        }
-        #search-results-list {
-            overflow-y: auto;
-            flex: 1;
-            margin-top: 8px;
-        }
+        /* Search overlay — removed (dedicated Search tab exists) */
 
         .empty { text-align: center; color: #555; margin-top: 60px; font-size: 14px; }
         .loading { text-align: center; color: var(--text-muted); margin-top: 30px; font-size: 13px; }
@@ -430,11 +396,9 @@
             </div>
             <h2>Статистика</h2>
             <div class="stat-grid" id="stat-grid"></div>
-            <button class="btn-danger">Сбросить вкус</button>
+            <button class="btn-danger">Сбросить предпочтения</button>
         </div>
     </div>
-
-    <div id="fab-search" class="fab">🔍</div>
 
     <div id="mini-player">
         <img id="mp-thumb">
@@ -461,16 +425,6 @@
         <div class="nav-item" data-tab="profile"><span class="nav-icon">👤</span>Профиль</div>
     </div>
 
-    <div id="search-overlay">
-        <div class="search-head">
-            <input id="search-input" class="search-input" placeholder="Трек, артист, альбом…">
-            <div class="search-close">✕</div>
-        </div>
-        <div class="chip-row" id="modal-source-chips"></div>
-        <div id="search-results-list">
-            <p class="empty">Введите запрос для поиска</p>
-        </div>
-    </div>
 
     <script>
         // =====================================================================
@@ -552,7 +506,7 @@
             currentTrack: null,
             isPlaying: false,
             duration: 0,
-            playbackCtx: 'wave',           // 'wave' | 'genre' | 'search-tab' | 'search-modal' | 'collection'
+            playbackCtx: 'wave',           // 'wave' | 'genre' | 'search-tab' | 'collection'
 
             // ===== Queue (owner: PlaybackEngine — Plan 04) =====
             queue: [],
@@ -572,9 +526,8 @@
 
             // ===== Search (owner: SearchScreen — Plan 07) =====
             activeSource: 'all',
-            activeModalSource: 'all',
+
             searchTabResults: [],
-            searchModalResults: [],
 
             // ===== Genre (owner: HomeScreen/GenreScreen — Plan 07) =====
             genreResults: [],
@@ -676,12 +629,9 @@
             waveMoods:  ()            => req(`/wave/moods?user_id=${Tg.USER_ID}`),
             search:     (q, src)      => req(`/search?q=${encodeURIComponent(q)}${src && src !== 'all' ? `&sources=${src}` : ''}&user_id=${Tg.USER_ID}`),
             genre:      (name)        => req(`/genre?q=${encodeURIComponent(name)}&user_id=${Tg.USER_ID}`),
-            likes:      ()            => req(`/library/likes?user_id=${Tg.USER_ID}`),
-            stats:      ()            => req(`/library/stats?user_id=${Tg.USER_ID}`),
+            stats:      ()            => req(`/library/stats`),
             taste:      ()            => req(`/taste/${Tg.USER_ID}`),
-            tasteReset: ()            => req(`/taste/reset?user_id=${Tg.USER_ID}`, { method: 'POST' }),
-            like:       (t)           => req(`/library/like`,    { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id, track: t } }),
-            dislike:    (t)           => req(`/library/dislike`, { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id } }),
+            like:       (t)           => req(`/like`, { method: 'POST', body: { user_id: Tg.USER_ID, track_id: t.id, track: t } }),
             feedback:   (ev)          => req(`/wave/feedback`,   { method: 'POST', body: ev }),
             streamUrl,
           };
@@ -1152,7 +1102,7 @@
           return { mount, render, destroy };
         })();
 
-        // ===== Track-list delegation helper (shared by HomeScreen/SearchScreen/SearchModal/GenreScreen/LibraryScreen) =====
+        // ===== Track-list delegation helper (shared by HomeScreen/SearchScreen/GenreScreen) =====
         function attachTrackListDelegate(rootEl, getTracks, ctx) {
           rootEl.onclick = (e) => {
             const row = e.target.closest('[data-idx]');
@@ -1163,13 +1113,9 @@
             if (!t) return;
             const action = e.target.closest('[data-action]')?.dataset.action;
             if (action === 'like')    { Api.like(t).catch(() => {}); return; }
-            if (action === 'dislike') { Api.dislike(t).catch(() => {}); return; }
             if (action === 'play') {
               if (ctx === 'wave') {
                 PlaybackEngine.playAt(idx);
-              } else if (ctx === 'search-modal') {
-                PlaybackEngine.playContext(ctx, tracks, idx);
-                document.getElementById('search-overlay').classList.remove('open');
               } else {
                 PlaybackEngine.playContext(ctx, tracks, idx);
               }
@@ -1190,8 +1136,7 @@
                   <div class="track-artist">${Utils.escapeHtml(t.artist || '')}</div>
                 </div>
                 <div class="track-actions">
-                  <div class="icon-btn" data-action="like">❤️</div>
-                  <div class="icon-btn" data-action="dislike">👎</div>
+                  <div class="icon-btn" data-action="like">🤍</div>
                 </div>
               </div>
             `;
@@ -1286,7 +1231,7 @@
           return { mount, destroy, reload, loadWave };
         })();
 
-        // ===== SourceChips (child of SearchScreen + SearchModal) =====
+        // ===== SourceChips (child of SearchScreen) =====
         const SourceChips = (() => {
           function mount(rootEl, storeKey, onChange) {
             const active = Store.get(storeKey);
@@ -1338,35 +1283,7 @@
           return { mount, destroy };
         })();
 
-        // ===== SearchModal (overlay search) =====
-        const SearchModal = (() => {
-          let root, inputEl, resultsEl, timer = null;
-          async function doSearch() {
-            const q = inputEl.value.trim();
-            if (!q) { resultsEl.innerHTML = '<p class="empty">Введите запрос для поиска</p>'; return; }
-            resultsEl.innerHTML = '<p class="loading">Ищем…</p>';
-            try {
-              const d = await Api.search(q, Store.get('activeModalSource'));
-              const tracks = d.tracks || [];
-              Store.set({ searchModalResults: tracks });
-              resultsEl.innerHTML = tracks.length
-                ? tracks.map((t, i) => TrackCard.render(t, i, 'search-modal')).join('')
-                : '<p class="empty">Ничего не найдено</p>';
-            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка поиска</p>'; }
-          }
-          function mount(el) {
-            root = el;
-            inputEl   = root.querySelector('#search-input');
-            resultsEl = root.querySelector('#search-results-list');
-            SourceChips.mount(root.querySelector('#modal-source-chips'), 'activeModalSource', () => doSearch());
-            inputEl.addEventListener('input', () => { clearTimeout(timer); timer = setTimeout(doSearch, 500); });
-            attachTrackListDelegate(resultsEl, () => Store.get('searchModalResults') || [], 'search-modal');
-            root.querySelector('.search-close').onclick = () => root.classList.remove('open');
-          }
-          function destroy() {}
-          function open() { root.classList.add('open'); setTimeout(() => inputEl.focus(), 200); }
-          return { mount, destroy, open };
-        })();
+        // SearchModal — removed (dedicated Search tab exists)
 
         // ===== GenreScreen (Genres tab) =====
         const GenreScreen = (() => {
@@ -1414,27 +1331,18 @@
         })();
 
         // ===== LibraryScreen (Collection tab) =====
+        // Note: /library/likes endpoint does not exist yet on backend.
+        // Showing placeholder until API is available.
         const LibraryScreen = (() => {
           let root, resultsEl;
-          async function load() {
-            resultsEl.innerHTML = '<p class="loading">Загружаем лайки…</p>';
-            try {
-              const d = await Api.likes();
-              const tracks = d.tracks || [];
-              Store.set({ collectionResults: tracks });
-              resultsEl.innerHTML = tracks.length
-                ? tracks.map((t, i) => TrackCard.render(t, i, 'collection')).join('')
-                : '<p class="empty">Пока нет лайков</p>';
-            } catch (e) { resultsEl.innerHTML = '<p class="empty">Ошибка загрузки</p>'; }
-          }
           function mount(el) {
             root = el;
             resultsEl = root.querySelector('#collection-results');
-            attachTrackListDelegate(resultsEl, () => Store.get('collectionResults') || [], 'collection');
-            Store.subscribe(['screen'], (state) => { if (state.screen === 'collection') load(); });
+            resultsEl.innerHTML = '<p class="empty">Скоро здесь появятся ваши лайки ❤️</p>';
           }
           function destroy() {}
-          return { mount, destroy, reload: load };
+          function reload() {}
+          return { mount, destroy, reload };
         })();
 
         // ===== TasteBars (child of ProfileScreen) =====
@@ -1467,32 +1375,32 @@
           async function load() {
             try {
               const [taste, stats] = await Promise.all([Api.taste(), Api.stats()]);
-              Store.set({ taste: taste.tags || [], stats });
+              Store.set({ taste: taste.profile || taste.tags || [], stats });
               renderStats(stats);
             } catch (e) { /* TasteBars handles empty */ }
           }
           function renderStats(s) {
             const items = [
-              { v: s.tracks_count  || s.tracks  || 0, l: 'Треков' },
-              { v: s.likes_count   || s.likes   || 0, l: 'Лайков' },
-              { v: s.listens_count || s.listens || 0, l: 'Прослушиваний' },
-              { v: s.artists_count || s.artists || 0, l: 'Артистов' },
+              { v: s.tracks_indexed || s.tracks_on_pc || 0, l: 'Треков в базе' },
+              { v: formatBytes(s.library_bytes || 0),       l: 'Размер библиотеки' },
             ];
             statsEl.innerHTML = items.map(i =>
               `<div class="stat-box"><div class="stat-value">${i.v}</div><div class="stat-label">${Utils.escapeHtml(i.l)}</div></div>`
             ).join('');
           }
-          async function reset() {
-            // Phase 11 / PROF-4 will migrate to tg.showConfirm. Phase 1 keeps current window.confirm.
-            if (!confirm('Сбросить вкусовой профиль?')) return;
-            try { await Api.tasteReset(); load(); } catch (e) {}
+          function formatBytes(b) {
+            if (b < 1024) return b + ' B';
+            if (b < 1048576) return (b / 1024).toFixed(1) + ' KB';
+            if (b < 1073741824) return (b / 1048576).toFixed(1) + ' MB';
+            return (b / 1073741824).toFixed(1) + ' GB';
           }
           function mount(el) {
             root = el;
             statsEl  = root.querySelector('#stat-grid');
             resetBtn = root.querySelector('.btn-danger');
             TasteBars.mount(root.querySelector('#taste-bars'));
-            if (resetBtn) resetBtn.onclick = reset;
+            // Reset button hidden until backend API exists
+            if (resetBtn) resetBtn.style.display = 'none';
             Store.subscribe(['screen'], (state) => { if (state.screen === 'profile') load(); });
           }
           function destroy() {}
@@ -1539,13 +1447,6 @@
 
           // Mount chrome
           BottomNav.mount(document.querySelector('.bottom-nav'));
-
-          // Mount search modal (FAB overlay — not a screen)
-          SearchModal.mount(document.getElementById('search-overlay'));
-
-          // FAB → open search modal
-          const fab = document.getElementById('fab-search');
-          if (fab) fab.onclick = () => SearchModal.open();
 
           // Tab visibility sync (Phase 12 will replace this with proper mount/unmount)
           Store.subscribe(['screen'], (state) => {
