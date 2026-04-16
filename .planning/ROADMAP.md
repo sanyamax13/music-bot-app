@@ -88,6 +88,11 @@
 - Все жесты работают
 **Est:** M
 
+**Plans:** 1 plan
+
+Plans:
+- [ ] 04-01-PLAN.md — Heart-button, buffering spinner, likedIds population, FP heart sync
+
 ## Phase 5: Fullscreen Player Redesign
 
 **Goal:** Визуальный и тактильный апгрейд fullscreen-плеера до уровня Spotify/Яндекс.
