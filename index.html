@@ -1228,11 +1228,14 @@
             return `
               <div id="fp-bg-gradient"></div>
               <div class="fp-handle" data-action="close">▾</div>
-              <img id="fp-cover" src="${Utils.escapeHtml(t.thumb || '')}" crossorigin="anonymous">
+              <div class="fp-cover-wrap">
+                <img id="fp-cover" src="${Utils.escapeHtml(t.thumb || '')}" crossorigin="anonymous">
+                <div class="fp-heart-overlay">\u2764\uFE0F</div>
+              </div>
               <div class="fp-meta">
                 <div class="track-info">
                   <h2 id="fp-title">${Utils.escapeHtml(t.title || '')}</h2>
-                  <p id="fp-artist">${Utils.escapeHtml(t.artist || '')}</p>
+                  <p id="fp-artist" data-action="search-artist">${Utils.escapeHtml(t.artist || '')}</p>
                 </div>
                 <div id="fp-fav-btn" class="icon-btn" style="font-size:26px;" data-action="like">${(t.id && Store.get('likedIds').has(t.id)) ? '❤️' : '🤍'}</div>
               </div>
@@ -1252,6 +1255,7 @@
                 <div data-action="dislike">👎</div>
                 <div data-action="like-feedback">👍</div>
               </div>
+              <div class="fp-queue-peek" style="display:none"></div>
               <div class="fp-volume">
                 <div class="vol-icon" data-action="mute">${PlaybackEngine.isMuted() ? '🔇' : '🔊'}</div>
                 <input type="range" id="volume-slider" min="0" max="100" value="${Math.round(PlaybackEngine.getVolume() * 100)}" step="1">
