@@ -116,7 +116,7 @@ Plans:
 
 Plans:
 - [x] 05-01-PLAN.md — CSS + template foundation (cover resize, scrubber touch-target, heart overlay, queue-peek, artist tap)
-- [ ] 05-02-PLAN.md — JS behavior (double-tap like, queue-peek subscription, artist tap-to-search, SearchScreen API)
+- [x] 05-02-PLAN.md — JS behavior (double-tap like, queue-peek subscription, artist tap-to-search, SearchScreen API)
 
 ## Phase 6: Queue Bottom Sheet
 
