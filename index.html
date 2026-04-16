@@ -1040,16 +1040,18 @@
         // ===== COMPONENTS =====
 
         const MiniPlayer = (() => {
-          let root, unsubTrack, unsubPlaying, rafId;
+          let root, unsubTrack, unsubPlaying, unsubBuffering, unsubLiked, rafId;
 
           function templateTrack(t) {
             if (!t) return '';
+            const liked = Store.get('likedIds').has(t.id);
             return `
               <img id="mp-thumb" src="${Utils.escapeHtml(t.thumb || '')}">
               <div class="mp-info">
                 <div id="mp-title">${Utils.escapeHtml(t.title || '')}</div>
                 <div id="mp-artist">${Utils.escapeHtml(t.artist || '')}</div>
               </div>
+              <div id="mp-heart-btn" data-action="like">${liked ? '❤️' : '🤍'}</div>
               <div id="mp-play-btn" data-action="toggle">${Store.get('isPlaying') ? '⏸' : '▶'}</div>
               <div id="mp-progress"></div>
             `;
@@ -1065,7 +1067,19 @@
 
           function patchPlayIcon() {
             const btn = root.querySelector('#mp-play-btn');
-            if (btn) btn.innerText = Store.get('isPlaying') ? '⏸' : '▶';
+            if (!btn) return;
+            if (Store.get('isBuffering')) {
+              btn.innerHTML = '<span class="mp-spinner"></span>';
+            } else {
+              btn.innerText = Store.get('isPlaying') ? '⏸' : '▶';
+            }
+          }
+
+          function patchHeartIcon() {
+            const btn = root.querySelector('#mp-heart-btn');
+            if (!btn) return;
+            const t = Store.get('currentTrack');
+            btn.innerText = (t && Store.get('likedIds').has(t.id)) ? '❤️' : '🤍';
           }
 
           // Hairline progress bar — rAF loop
@@ -1110,9 +1124,27 @@
               }
             }, { passive: true });
 
-            // Tap: play btn → toggle, elsewhere → open FP
+            // Tap: like → heart, play btn → toggle, elsewhere → open FP
             root.onclick = (e) => {
-              if (e.target.closest('[data-action="toggle"]')) {
+              if (e.target.closest('[data-action="like"]')) {
+                e.stopPropagation();
+                const t = Store.get('currentTrack');
+                if (!t) return;
+                const heart = root.querySelector('#mp-heart-btn');
+                const liked = Store.get('likedIds');
+                if (heart) {
+                  heart.innerText = '❤️';
+                  heart.style.transform = 'scale(1.3)';
+                  setTimeout(() => heart.style.transform = '', 200);
+                }
+                liked.add(t.id);
+                Store.set({ likedIds: new Set(liked) });
+                Api.like(t).catch(() => {
+                  liked.delete(t.id);
+                  Store.set({ likedIds: new Set(liked) });
+                  if (heart) heart.innerText = '🤍';
+                });
+              } else if (e.target.closest('[data-action="toggle"]')) {
                 e.stopPropagation();
                 PlaybackEngine.toggle();
               } else {
@@ -1123,14 +1155,18 @@
 
           function mount(el) {
             root = el;
-            unsubTrack   = Store.subscribe(['currentTrack'], renderTrack);
-            unsubPlaying = Store.subscribe(['isPlaying'],    patchPlayIcon);
+            unsubTrack     = Store.subscribe(['currentTrack'], renderTrack);
+            unsubPlaying   = Store.subscribe(['isPlaying'],    patchPlayIcon);
+            unsubBuffering = Store.subscribe(['isBuffering'],  patchPlayIcon);
+            unsubLiked     = Store.subscribe(['likedIds'],     patchHeartIcon);
             renderTrack();
           }
 
           function destroy() {
-            if (unsubTrack)   unsubTrack();
-            if (unsubPlaying) unsubPlaying();
+            if (unsubTrack)     unsubTrack();
+            if (unsubPlaying)   unsubPlaying();
+            if (unsubBuffering) unsubBuffering();
+            if (unsubLiked)     unsubLiked();
             cancelAnimationFrame(rafId);
             rafId = null;
             if (root) { root.innerHTML = ''; root.style.display = 'none'; }
