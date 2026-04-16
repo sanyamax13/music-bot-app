@@ -1218,7 +1218,7 @@
         })();
 
         const FullscreenPlayer = (() => {
-          let root, rafId, unsubTrack, unsubDuration, unsubPlaying, unsubOpen, unsubLiked;
+          let root, rafId, unsubTrack, unsubDuration, unsubPlaying, unsubOpen, unsubLiked, unsubQueuePeek;
           let dragging = false;   // set while user is scrubbing #progress — rAF tick must not overwrite
 
           // Full template is used ONLY on currentTrack change (rare).
@@ -1370,6 +1370,14 @@
                   if (slider) slider.value = PlaybackEngine.isMuted() ? 0 : Math.round(PlaybackEngine.getVolume() * 100);
                   break;
                 }
+                case 'search-artist': {
+                  const t = Store.get('currentTrack');
+                  if (!t || !t.artist) break;
+                  Router.closeFullscreen();
+                  Router.go('search', { push: false });
+                  SearchScreen.prefillAndSearch(t.artist);
+                  break;
+                }
               }
             };
             // Swipe gestures on fullscreen player
@@ -1423,6 +1431,47 @@
               volSlider.addEventListener('touchstart', (e) => e.stopPropagation());
               volSlider.addEventListener('click', (e) => e.stopPropagation());
             }
+
+            // Double-tap like on cover (FP-7, D-03/D-04/D-05)
+            let doubleTapTimer = null;
+            const coverWrap = root.querySelector('.fp-cover-wrap');
+            if (coverWrap) {
+              coverWrap.addEventListener('click', (e) => {
+                // Do not intercept scrubber drags or button taps
+                if (e.target.closest('input, [data-action]')) return;
+                if (doubleTapTimer) {
+                  clearTimeout(doubleTapTimer);
+                  doubleTapTimer = null;
+                  // Show heart overlay animation
+                  const overlay = root.querySelector('.fp-heart-overlay');
+                  if (overlay) {
+                    overlay.classList.remove('animate');
+                    void overlay.offsetWidth; // force reflow to restart animation
+                    overlay.classList.add('animate');
+                    setTimeout(() => overlay.classList.remove('animate'), 600);
+                  }
+                  // Haptic feedback (D-05)
+                  if (window.Telegram?.WebApp?.HapticFeedback) {
+                    Telegram.WebApp.HapticFeedback.impactOccurred('light');
+                  }
+                  // Optimistic like — same pattern as case 'like'
+                  const t = Store.get('currentTrack');
+                  if (!t) return;
+                  const heart = root.querySelector('#fp-fav-btn');
+                  const liked = Store.get('likedIds');
+                  if (heart) { heart.innerText = '❤️'; heart.style.transform = 'scale(1.3)'; setTimeout(() => heart.style.transform = '', 200); }
+                  liked.add(t.id);
+                  Store.set({ likedIds: new Set(liked) });
+                  Api.like(t).catch(() => {
+                    liked.delete(t.id);
+                    Store.set({ likedIds: new Set(liked) });
+                    if (heart) heart.innerText = '🤍';
+                  });
+                } else {
+                  doubleTapTimer = setTimeout(() => { doubleTapTimer = null; }, 300);
+                }
+              });
+            }
           }
 
           function tickProgress() {
@@ -1459,6 +1508,19 @@
               const t = Store.get('currentTrack');
               heart.innerText = (t && Store.get('likedIds').has(t.id)) ? '❤️' : '🤍';
             });
+            unsubQueuePeek = Store.subscribe(['queue', 'queueIndex'], () => {
+              const el = root.querySelector('.fp-queue-peek');
+              if (!el) return;
+              const queue = Store.get('queue');
+              const idx = Store.get('queueIndex');
+              const next = queue[idx + 1];
+              if (next) {
+                el.textContent = '\u0414\u0430\u043B\u0435\u0435: ' + next.title;
+                el.style.display = '';
+              } else {
+                el.style.display = 'none';
+              }
+            });
             renderTrack();
             syncOpen();
           }
@@ -1470,6 +1532,7 @@
             if (unsubDuration) unsubDuration();
             if (unsubOpen)     unsubOpen();
             if (unsubLiked)    unsubLiked();
+            if (unsubQueuePeek) unsubQueuePeek();
             if (root) root.innerHTML = '';
           }
 
@@ -1710,7 +1773,13 @@
             attachTrackListDelegate(resultsEl, () => Store.get('searchTabResults') || [], 'search-tab');
           }
           function destroy() {}
-          return { mount, destroy };
+          function prefillAndSearch(query) {
+            if (!inputEl) return;
+            inputEl.value = query;
+            clearTimeout(timer);
+            doSearch();
+          }
+          return { mount, destroy, prefillAndSearch };
         })();
 
         // SearchModal — removed (dedicated Search tab exists)
