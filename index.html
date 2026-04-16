@@ -243,6 +243,8 @@
             box-shadow: 0 12px 30px rgba(0,0,0,0.5);
             border: 1px solid rgba(255,255,255,0.08);
             cursor: pointer;
+            overflow: hidden;
+            flex-wrap: wrap;
         }
         #mp-thumb {
             width: 42px; height: 42px;
@@ -258,6 +260,13 @@
             padding: 6px 10px;
             cursor: pointer;
         }
+        #mp-progress {
+            position: absolute; bottom: 0; left: 0;
+            height: 2px; background: var(--accent);
+            border-radius: 0 0 16px 16px;
+            transition: width 0.3s linear;
+            pointer-events: none;
+        }
 
         /* Full player */
         #full-player {
@@ -272,6 +281,11 @@
             overflow-y: auto;
         }
         #full-player.open { top: 0; }
+        #fp-bg-gradient {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            opacity: 0.4; transition: background 0.5s ease;
+            pointer-events: none; z-index: -1;
+        }
         .fp-handle {
             font-size: 28px; color: #555;
             text-align: center; margin-bottom: 8px;
@@ -997,7 +1011,7 @@
         // ===== COMPONENTS =====
 
         const MiniPlayer = (() => {
-          let root, unsubTrack, unsubPlaying;
+          let root, unsubTrack, unsubPlaying, rafId;
 
           function templateTrack(t) {
             if (!t) return '';
@@ -1008,27 +1022,66 @@
                 <div id="mp-artist">${Utils.escapeHtml(t.artist || '')}</div>
               </div>
               <div id="mp-play-btn" data-action="toggle">${Store.get('isPlaying') ? '⏸' : '▶'}</div>
+              <div id="mp-progress"></div>
             `;
           }
 
-          // Full re-render only on currentTrack change (rare event).
           function renderTrack() {
             const t = Store.get('currentTrack');
             root.style.display = t ? 'flex' : 'none';
             root.innerHTML = templateTrack(t);
             hydrate();
+            if (t && !rafId) tickProgress();
           }
 
-          // Surgical patch on isPlaying change — do NOT rewrite innerHTML.
           function patchPlayIcon() {
             const btn = root.querySelector('#mp-play-btn');
             if (btn) btn.innerText = Store.get('isPlaying') ? '⏸' : '▶';
           }
 
+          // Hairline progress bar — rAF loop
+          function tickProgress() {
+            const bar = root.querySelector('#mp-progress');
+            if (bar) {
+              const pos = PlaybackEngine.getPosition();
+              const dur = PlaybackEngine.getDuration();
+              bar.style.width = dur ? `${(pos / dur) * 100}%` : '0%';
+            }
+            if (Store.get('currentTrack')) {
+              rafId = requestAnimationFrame(tickProgress);
+            } else {
+              rafId = null;
+            }
+          }
+
           function hydrate() {
-            // Single delegated click on root: tap on play btn → toggle, tap elsewhere → expand FP.
-            // IMPORTANT: MiniPlayer does NOT write fullscreenOpen directly. It calls Router.openFullscreen()
-            // to keep Router as the single writer of that key (ARCH-1).
+            // Swipe tracking
+            let startX = 0, startY = 0, swiping = false;
+            root.addEventListener('touchstart', (e) => {
+              startX = e.touches[0].clientX;
+              startY = e.touches[0].clientY;
+              swiping = true;
+            }, { passive: true });
+            root.addEventListener('touchend', (e) => {
+              if (!swiping) return;
+              swiping = false;
+              const dx = e.changedTouches[0].clientX - startX;
+              const dy = e.changedTouches[0].clientY - startY;
+              const absDx = Math.abs(dx), absDy = Math.abs(dy);
+              // Swipe up → open fullscreen
+              if (absDy > 40 && absDy > absDx && dy < 0) {
+                Router.openFullscreen();
+                return;
+              }
+              // Swipe left/right → next/prev
+              if (absDx > 50 && absDx > absDy) {
+                if (dx < 0) PlaybackEngine.next();
+                else PlaybackEngine.prev();
+                return;
+              }
+            }, { passive: true });
+
+            // Tap: play btn → toggle, elsewhere → open FP
             root.onclick = (e) => {
               if (e.target.closest('[data-action="toggle"]')) {
                 e.stopPropagation();
@@ -1044,12 +1097,13 @@
             unsubTrack   = Store.subscribe(['currentTrack'], renderTrack);
             unsubPlaying = Store.subscribe(['isPlaying'],    patchPlayIcon);
             renderTrack();
-            // Hairline progress is a Phase 4 (MINI-4) concern — not implemented here.
           }
 
           function destroy() {
             if (unsubTrack)   unsubTrack();
             if (unsubPlaying) unsubPlaying();
+            cancelAnimationFrame(rafId);
+            rafId = null;
             if (root) { root.innerHTML = ''; root.style.display = 'none'; }
           }
 
@@ -1065,8 +1119,9 @@
           function templateTrack(t) {
             t = t || {};
             return `
+              <div id="fp-bg-gradient"></div>
               <div class="fp-handle" data-action="close">▾</div>
-              <img id="fp-cover" src="${Utils.escapeHtml(t.thumb || '')}">
+              <img id="fp-cover" src="${Utils.escapeHtml(t.thumb || '')}" crossorigin="anonymous">
               <div class="fp-meta">
                 <div class="track-info">
                   <h2 id="fp-title">${Utils.escapeHtml(t.title || '')}</h2>
@@ -1097,9 +1152,55 @@
             `;
           }
 
+          // Dominant-color: extract color from cover image
+          function extractDominantColor(img) {
+            try {
+              const canvas = document.createElement('canvas');
+              canvas.width = 8; canvas.height = 8;
+              const ctx = canvas.getContext('2d');
+              ctx.drawImage(img, 0, 0, 8, 8);
+              const d = ctx.getImageData(0, 0, 8, 8).data;
+              let r = 0, g = 0, b = 0, n = 0;
+              for (let i = 0; i < d.length; i += 4) {
+                r += d[i]; g += d[i+1]; b += d[i+2]; n++;
+              }
+              return `rgb(${Math.round(r/n)},${Math.round(g/n)},${Math.round(b/n)})`;
+            } catch (e) {
+              // CORS blocked — fallback to hash-based color
+              return null;
+            }
+          }
+
+          function hashColor(str) {
+            let h = 0;
+            for (let i = 0; i < (str || '').length; i++) h = ((h << 5) - h + str.charCodeAt(i)) | 0;
+            const hue = Math.abs(h) % 360;
+            return `hsl(${hue}, 50%, 25%)`;
+          }
+
+          function applyBgColor() {
+            const bg = root.querySelector('#fp-bg-gradient');
+            const cover = root.querySelector('#fp-cover');
+            if (!bg || !cover) return;
+            const t = Store.get('currentTrack');
+            if (cover.complete && cover.naturalWidth) {
+              const color = extractDominantColor(cover) || hashColor(t?.title);
+              bg.style.background = `linear-gradient(180deg, ${color} 0%, var(--bg) 100%)`;
+            } else {
+              cover.onload = () => {
+                const color = extractDominantColor(cover) || hashColor(t?.title);
+                bg.style.background = `linear-gradient(180deg, ${color} 0%, var(--bg) 100%)`;
+              };
+              cover.onerror = () => {
+                bg.style.background = `linear-gradient(180deg, ${hashColor(t?.title)} 0%, var(--bg) 100%)`;
+              };
+            }
+          }
+
           function renderTrack() {
             root.innerHTML = templateTrack(Store.get('currentTrack'));
             hydrate();
+            applyBgColor();
           }
 
           // Surgical patches — do NOT rewrite innerHTML. This keeps #progress range
@@ -1153,6 +1254,35 @@
                 }
               }
             };
+            // Swipe gestures on fullscreen player
+            let fpStartX = 0, fpStartY = 0, fpSwiping = false;
+            root.addEventListener('touchstart', (e) => {
+              fpStartX = e.touches[0].clientX;
+              fpStartY = e.touches[0].clientY;
+              fpSwiping = true;
+            }, { passive: true });
+            root.addEventListener('touchend', (e) => {
+              if (!fpSwiping) return;
+              fpSwiping = false;
+              const dx = e.changedTouches[0].clientX - fpStartX;
+              const dy = e.changedTouches[0].clientY - fpStartY;
+              const absDx = Math.abs(dx), absDy = Math.abs(dy);
+              // Swipe down → close fullscreen
+              if (absDy > 60 && absDy > absDx && dy > 0) {
+                Router.closeFullscreen();
+                return;
+              }
+              // Swipe left/right on cover area → next/prev
+              const cover = root.querySelector('#fp-cover');
+              if (cover && absDx > 50 && absDx > absDy) {
+                const rect = cover.getBoundingClientRect();
+                if (fpStartY >= rect.top && fpStartY <= rect.bottom) {
+                  if (dx < 0) PlaybackEngine.next();
+                  else PlaybackEngine.prev();
+                }
+              }
+            }, { passive: true });
+
             // Range scrub — track drag state so rAF tick doesn't fight the user's finger.
             const range = root.querySelector('#progress');
             if (range) {
