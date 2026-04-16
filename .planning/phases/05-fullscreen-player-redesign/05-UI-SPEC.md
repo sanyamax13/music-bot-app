@@ -1,7 +1,7 @@
 ---
 phase: 5
 slug: fullscreen-player-redesign
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-04-16
