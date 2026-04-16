@@ -88,10 +88,10 @@
 - Все жесты работают
 **Est:** M
 
-**Plans:** 1 plan
+**Plans:** 1/1 plans complete
 
 Plans:
-- [ ] 04-01-PLAN.md — Heart-button, buffering spinner, likedIds population, FP heart sync
+- [x] 04-01-PLAN.md — Heart-button, buffering spinner, likedIds population, FP heart sync
 
 ## Phase 5: Fullscreen Player Redesign
 
