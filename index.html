@@ -734,15 +734,17 @@
           }
 
           function _onStalled() {
-            Store.set({ isPlaying: false }); // show buffering state
+            // Don't change isPlaying on stalled — it causes icon flicker.
+            // Buffering indicator is a Phase 4 concern.
           }
 
           function _onWaiting() {
-            Store.set({ isPlaying: false });
+            // Same as stalled — don't desync isPlaying during buffering.
           }
 
           function _onPlaying() {
-            Store.set({ isPlaying: true });
+            // Sync isPlaying to true when audio actually starts/resumes
+            if (!Store.get('isPlaying')) Store.set({ isPlaying: true });
           }
 
           // === MediaSession ===
@@ -1158,14 +1160,18 @@
               range.ontouchstart  = () => { dragging = true; };
               range.ontouchend    = () => { dragging = false; };
             }
-            // Volume slider
+            // Volume slider — stop propagation to prevent root.onclick from interfering
             const volSlider = root.querySelector('#volume-slider');
             if (volSlider) {
-              volSlider.oninput = () => {
+              volSlider.addEventListener('input', (e) => {
+                e.stopPropagation();
                 PlaybackEngine.setVolume(parseInt(volSlider.value) / 100);
                 const icon = root.querySelector('.vol-icon');
                 if (icon) icon.innerText = parseInt(volSlider.value) === 0 ? '🔇' : '🔊';
-              };
+              });
+              volSlider.addEventListener('pointerdown', (e) => e.stopPropagation());
+              volSlider.addEventListener('touchstart', (e) => e.stopPropagation());
+              volSlider.addEventListener('click', (e) => e.stopPropagation());
             }
           }
 
